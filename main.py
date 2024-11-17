@@ -1,18 +1,71 @@
 # ESP32C6 BLE pcratch(micro:bit) v1.0.3
-from machine import Pin, I2C, ADC, PWM
+import os
 import sys
-
-# ruff: noqa: E402
-sys.path.append("")
+import struct
+import asyncio
+from machine import Pin, I2C, ADC, PWM
 from ssd1306 import SSD1306_I2C
 from neopixel import NeoPixel
 from ahtx0 import AHT20
-import asyncio
-from ble_ext import BLEDevice
-import struct
+from ble_conn import BLEConnection
 
+# BLEConnection クラスのインスタンスを作成
+ble_conn = BLEConnection()
 
-conn = BLEDevice()
+# デバイス情報を取得
+def get_device_info():
+    info = os.uname()
+    return {
+        "sysname": info.sysname,
+        "nodename": info.nodename,
+        "release": info.release,
+        "version": info.version,
+        "machine": info.machine
+    }
+
+device_info = get_device_info()
+print(device_info)
+
+if 'ESP32C6' in device_info['machine']:
+    print("Welcome to ESP32C6")
+    # ESP32C6 Pin layout
+    # GPIO0 :A0 :       5V
+    # GPIO1 :A1 :       GND
+    # GPIO2 :A2 :       3V3
+    # GPIO21:   :       GPIO18:   :
+    # GPIO22:SDA:       GPIO20:   :
+    # GPIO23:SDL:       GPIO19:   :
+    # GPIO16:TX :       GPIO17:RX :
+    # 人感センサ
+    am312 = ADC(Pin(0, Pin.IN))
+    am312.atten(ADC.ATTN_6DB)    # 6dBの入力減衰率を設定
+    # am312.width(ADC.WIDTH_12BIT)   # 12ビットの戻り値を設定(戻り値の範囲 0-4095)
+    # 温度なし
+    adc0 = ADC(Pin(1, Pin.IN))
+    #adc0.atten(ADC.ATTN_6DB)
+    #adc0.width(ADC.WIDTH_12BIT)   # 12ビットの戻り値を設定(戻り値の範囲 0-4095)
+    # 明るさ
+    adc1 = ADC(Pin(2, Pin.IN))
+    adc1.atten(ADC.ATTN_11DB)    # 11dBの入力減衰率を設定(電圧範囲はおよそ 0.0v - 3.6v)
+    adc1.width(ADC.WIDTH_12BIT)   # 12ビットの戻り値を設定(戻り値の範囲 0-4095)
+    # スピーカー
+    sp01 = PWM(Pin(19, Pin.OUT), freq=440, duty=0)	# スピーカー
+    # I2C
+    SDA = 22
+    SCL = 23
+    # Pin.IN
+    pin3 = Pin(17, Pin.IN, Pin.PULL_UP)	# スイッチ
+    pin5 = Pin(21, Pin.IN, Pin.PULL_UP)	# スイッチ
+    pin7 = Pin(18, Pin.IN, Pin.PULL_UP)	# スイッチ
+    # 
+    np = NeoPixel(Pin(16, Pin.OUT), 4)	# GPIO 21 番に NeoPixel が4個接続されている
+
+    i2c = I2C(0, scl=Pin(SCL), sda=Pin(SDA)) # I2C初期化
+    display = SSD1306_I2C(128, 64, i2c) #(幅, 高さ, I2Cオブジェクト)
+    aht21 = AHT20(i2c)
+else:
+    print("This device is not supported.")
+
 
 # This would be periodically polling a hardware sensor.
 def send_sensor_value():
@@ -27,45 +80,9 @@ def send_sensor_value():
     temperature = int(adc0.read()/4095*255)  # 温度(0～255)
     sound_level = 0  # 音レベル (8ビット)
     buffer = struct.pack('<I3B', gpio_data, light_level, temperature, sound_level)
-    conn.state_write(buffer)
+    ble_conn.state_write(buffer)
 
-# ESP32C6 Pin layout
 #
-# GPIO0 :A0 :       5V
-# GPIO1 :A1 :       GND
-# GPIO2 :A2 :       3V3
-# GPIO21:   :       GPIO18:   :
-# GPIO22:SDA:       GPIO20:   :
-# GPIO23:SDL:       GPIO19:   :
-# GPIO16:TX :       GPIO17:RX :
-
-# 人感センサ
-am312 = ADC(Pin(0, Pin.IN))
-am312.atten(ADC.ATTN_6DB)    # 6dBの入力減衰率を設定
-# am312.width(ADC.WIDTH_12BIT)   # 12ビットの戻り値を設定(戻り値の範囲 0-4095)
-# 温度なし
-adc0 = ADC(Pin(1, Pin.IN))
-#adc0.atten(ADC.ATTN_6DB)
-#adc0.width(ADC.WIDTH_12BIT)   # 12ビットの戻り値を設定(戻り値の範囲 0-4095)
-# 明るさ
-adc1 = ADC(Pin(2, Pin.IN))
-adc1.atten(ADC.ATTN_11DB)    # 11dBの入力減衰率を設定(電圧範囲はおよそ 0.0v - 3.6v)
-adc1.width(ADC.WIDTH_12BIT)   # 12ビットの戻り値を設定(戻り値の範囲 0-4095)
-# スピーカー
-sp01 = PWM(Pin(19, Pin.OUT), freq=440, duty=0)	# スピーカー
-# I2C
-SDA = 22
-SCL = 23
-# Pin.IN
-pin3 = Pin(17, Pin.IN, Pin.PULL_UP)	# スイッチ
-pin5 = Pin(21, Pin.IN, Pin.PULL_UP)	# スイッチ
-pin7 = Pin(18, Pin.IN, Pin.PULL_UP)	# スイッチ
-# 
-np = NeoPixel(Pin(16, Pin.OUT), 4)	# GPIO 21 番に NeoPixel が4個接続されている
-
-i2c = I2C(0, scl=Pin(SCL), sda=Pin(SDA)) # I2C初期化
-display = SSD1306_I2C(128, 64, i2c) #(幅, 高さ, I2Cオブジェクト)
-
 def playtone(frequency, vol):
     sp01.freq(int(frequency))  # Hz
     sp01.duty_u16(int(vol*300))      #
@@ -116,7 +133,6 @@ def lux():
     val = adc1.read_u16()/ 65535 * 3.6 * 20/9/10000 * ( 10 ** 6)
     return val
 
-aht21 = AHT20(i2c)
 
 async def disp_task():
     while True:
@@ -133,7 +149,7 @@ async def disp_task():
         #print(sound)
         #print(am312.read_u16())
         display.fill(0)
-        display.text("Hello Pcratch!", 0, 0)
+        display.text(ble_conn.NAME[-16:], 0, 0)
         display.text(temp, 0, 8*2)
         display.text(humi, 0, 8*3)
         display.text(lx, 0, 8*4)
@@ -185,7 +201,7 @@ async def sensor_task():
 
 
 async def main():
-    t1 = asyncio.create_task(conn.ble_task(do_command))
+    t1 = asyncio.create_task(ble_conn.ble_task(do_command))
     t2 = asyncio.create_task(disp_task())
     t3 = asyncio.create_task(sensor_task())
     await asyncio.gather(t1, t2, t3)

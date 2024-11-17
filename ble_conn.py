@@ -9,7 +9,7 @@ import network
 from micropython import const
 
 
-class BLEDevice:
+class BLEConnection:
     def __init__(self):
         # デバイス名を設定
         self.wlan = network.WLAN(network.STA_IF)
@@ -17,7 +17,8 @@ class BLEDevice:
         mac = self.wlan.config('mac')
         # 下位バイトをドット区切りの10進数に変換
         mac_str = '.'.join(str(b) for b in mac[-3:])
-        self._NAME = f"BBC micro:bit [{mac_str}]"
+        self.NAME = f"BBC micro:bit [{mac_str}]"
+        print(self.NAME,":",mac)
 
         # サービスUUIDと characteristic UUID を定義
         self.IOT_SERVICE_UUID = bluetooth.UUID('0b50f3e4-607f-4151-9091-7d008d6ffc5c')
@@ -77,7 +78,7 @@ class BLEDevice:
             try:
                 async with await aioble.advertise(
                     self._ADV_INTERVAL_MS,
-                    name=self._NAME,
+                    name=self.NAME,
                     services=[self.IOT_SERVICE_UUID],
                     appearance=self._ADV_APPEARANCE_GENERIC_TAG,
                 ) as connection:
