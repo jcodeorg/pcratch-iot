@@ -15,7 +15,8 @@ class BLEDevice:
         self.wlan = network.WLAN(network.STA_IF)
         self.wlan.active(True)
         mac = self.wlan.config('mac')
-        mac_str = ubinascii.hexlify(mac).decode('utf-8').upper()
+        # 下位バイトをドット区切りの10進数に変換
+        mac_str = '.'.join(str(b) for b in mac[-3:])
         self._NAME = f"BBC micro:bit [{mac_str}]"
 
         # サービスUUIDと characteristic UUID を定義
