@@ -59,10 +59,14 @@ if 'ESP32C6' in device_info['machine']:
     np = NeoPixel(Pin(16, Pin.OUT), 4)	# GPIO 21 番に NeoPixel が4個接続されている
     # I2C
     i2c = I2C(0, scl=Pin(23), sda=Pin(22)) # I2C初期化
-    display = SSD1306_I2C(128, 64, i2c) #(幅, 高さ, I2Cオブジェクト)
-    # 画面をさかさまにするコマンドを送信
-    display.write_cmd(0xA0)  # セグメントリマップ
-    display.write_cmd(0xC0)  # COM出力スキャン方向
+    try:
+        oled = SSD1306_I2C(128, 64, i2c)  #(幅, 高さ, I2Cオブジェクト)
+        # 画面をさかさまにするコマンドを送信
+        oled.write_cmd(0xA0)  # セグメントリマップ
+        oled.write_cmd(0xC0)  # COM出力スキャン方向
+    except Exception as e:
+        print(f"Error initializing oled: {e}")
+        oled = None  # oledをNoneに設定してプログラムが続行できるようにする
 
     # AHT20 センサー
     aht21 = AHT20(i2c)
@@ -89,7 +93,7 @@ elif 'Raspberry Pi Pico W with RP2040' in device_info['machine']:
     np = NeoPixel(Pin(21, Pin.OUT), 4)	# GPIO 21 番に NeoPixel が4個接続されている
     # I2C
     i2c = I2C(0, scl=Pin(1), sda=Pin(0)) # I2C初期化
-    display = SSD1306_I2C(128, 64, i2c) #(幅, 高さ, I2Cオブジェクト)
+    oled = SSD1306_I2C(128, 64, i2c) #(幅, 高さ, I2Cオブジェクト)
     aht21 = AHT20(i2c)
 
     # VSYS電源電圧を取得する
@@ -189,14 +193,14 @@ async def disp_task():
         sd = "A1   :{:05d}".format(sound)
         #print(sound)
         #print(am312.read_u16())
-        display.fill(0)
-        display.text(ble_conn.NAME[-16:], 0, 0)
-        display.text(temp, 0, 8*2)
-        display.text(humi, 0, 8*3)
-        display.text(lx, 0, 8*4)
-        display.text(hs, 0, 8*5)
-        display.text(sd, 0, 8*6)
-        display.show()
+        oled.fill(0)
+        oled.text(ble_conn.NAME[-16:], 0, 0)
+        oled.text(temp, 0, 8*2)
+        oled.text(humi, 0, 8*3)
+        oled.text(lx, 0, 8*4)
+        oled.text(hs, 0, 8*5)
+        oled.text(sd, 0, 8*6)
+        oled.show()
         await asyncio.sleep_ms(500)
 
 def do_command(data):
@@ -217,9 +221,9 @@ def do_command(data):
     command_message = data[1:]
     if command_id == 65:
         #print("文字", data[2:].decode('utf-8'),"間隔", data[1]*10)
-        display.fill(0)
-        display.text(data[2:].decode('utf-8'), 0, data[1]*10)
-        display.show()
+        oled.fill(0)
+        oled.text(data[2:].decode('utf-8'), 0, data[1]*10)
+        oled.show()
     elif command_id == 97:
         # data[2:] から4バイトを取得
         four_bytes = data[1:5]
