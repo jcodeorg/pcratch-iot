@@ -120,7 +120,7 @@ def send_sensor_value():
     sound_level = 0  # 音レベル (8ビット)
     buffer = struct.pack('<I3B', gpio_data, light_level, temperature, sound_level)
     # TODO: 送信するデータを更新
-    #ble_conn.state_write(buffer)
+    ble_conn.state_write(buffer)
 
 #
 def playtone(frequency, vol):
@@ -250,5 +250,6 @@ async def main():
     t2 = asyncio.create_task(disp_task())
     t3 = asyncio.create_task(sensor_task())
     await asyncio.gather(t1, t2, t3)
+    print("main() done!!")
 
 asyncio.run(main())

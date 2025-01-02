@@ -9,16 +9,46 @@ import network
 from micropython import const
 
 
+def microbit_friendly_name(unique_id):
+    length = 5
+    letters = 5
+    codebook = [
+        ['z', 'v', 'g', 'p', 't'],
+        ['u', 'o', 'i', 'e', 'a'],
+        ['z', 'v', 'g', 'p', 't'],
+        ['u', 'o', 'i', 'e', 'a'],
+        ['z', 'v', 'g', 'p', 't']
+    ]
+    name = []
+
+    # Derive our name from the nrf51822's unique ID
+    # _, n = struct.unpack("II", machine.unique_id())
+    mac_padded = b'\x00\x00' + unique_id # 6バイトのMACアドレスを8バイトにパディング
+    _, n = struct.unpack('>II', mac_padded)
+    ld = 1;
+    d = letters;
+
+    for i in range(0, length):
+        h = (n % d) // ld;
+        n -= h;
+        d *= letters;
+        ld *= letters;
+        name.insert(0, codebook[i][h]);
+
+    return "".join(name);
+
 class BLEConnection:
     def __init__(self):
         # デバイス名を設定
         self.wlan = network.WLAN(network.STA_IF)
         self.wlan.active(True)
-        mac = self.wlan.config('mac')
+        self.mac = self.wlan.config('mac')
         # 下位バイトをドット区切りの10進数に変換
-        mac_str = '.'.join(str(b) for b in mac[-3:])
-        self.NAME = f"BBC micro:bit [{mac_str}]"
-        print(self.NAME,":",mac)
+        # mac_str = '.'.join(str(b) for b in mac[-3:])
+        # self.NAME = f"BBC micro:bit [{mac_str}]"
+        self.riendly_name = microbit_friendly_name(self.mac)
+        self.NAME = f"BBC micro:bit [{self.riendly_name}]"
+        print(self.NAME)
 
         # サービスUUIDと characteristic UUID を定義
         self.IOT_SERVICE_UUID = bluetooth.UUID('0b50f3e4-607f-4151-9091-7d008d6ffc5c')
@@ -87,8 +117,9 @@ class BLEConnection:
                     data_to_send = struct.pack('<BBB', 0x01, 0x02, 0x03)
                     self.command_characteristic.write(data_to_send)
                     print("3バイト送信...") # 3バイトのデータを送信
-                    await connection.disconnected(timeout_ms=None)
-                    print("Disconnected.")
+                    # 切断理由を取得して表示
+                    reason = await connection.disconnected(timeout_ms=None)
+                    print(f"Disconnected. Reason: {reason}")
             except Exception as e:
                 print("Error during advertising or connection:", e)
                 await asyncio.sleep_ms(1000)
