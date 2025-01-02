@@ -49,6 +49,7 @@ class BLEConnection:
         self.riendly_name = microbit_friendly_name(self.mac)
         self.NAME = f"BBC micro:bit [{self.riendly_name}]"
         print(self.NAME)
+        self.connection = None  # 接続オブジェクトを初期化
 
         # サービスUUIDと characteristic UUID を定義
         self.IOT_SERVICE_UUID = bluetooth.UUID('0b50f3e4-607f-4151-9091-7d008d6ffc5c')
@@ -98,6 +99,25 @@ class BLEConnection:
         )
         aioble.register_services(self.iot_service)
 
+    def send_notification(self, data):
+        if self.connection:
+            # print("Sending notification to", self.connection.device)
+            self.actionevent_characteristic.notify(self.connection, data)
+            # print("Notification sent")
+        else:
+            print("No connection available to send notification")
+
+    async def async_send_notification(self, data):
+        try:
+            if self.connection:
+                print("Sending notification to", self.connection.device)
+                await self.actionevent_characteristic.notify(self.connection, data)
+                print("Notification sent")
+            else:
+                print("No connection available to send notification")
+        except Exception as e:
+            print(f"Error in async_send_notification: {e}")
+
     def state_write(self, buffer):
         self.state_characteristic.write(buffer, send_update=True)
 
@@ -113,13 +133,18 @@ class BLEConnection:
                     appearance=self._ADV_APPEARANCE_GENERIC_TAG,
                 ) as connection:
                     print("Connection from", connection.device)
+                    self.connection = connection  # 接続オブジェクトを設定
                     # 送信する3バイトのデータを定義
-                    data_to_send = struct.pack('<BBB', 0x01, 0x02, 0x03)
+                    hardware = 2 # 1:MICROBIT_V1, 2:MICROBIT_V2
+                    protocol = 0
+                    route = 0   # 0:BLE, 1:SERIAL
+                    data_to_send = struct.pack('<BBB', hardware, protocol, route)
                     self.command_characteristic.write(data_to_send)
                     print("3バイト送信...") # 3バイトのデータを送信
                     # 切断理由を取得して表示
                     reason = await connection.disconnected(timeout_ms=None)
                     print(f"Disconnected. Reason: {reason}")
+                    self.connection = None  # 接続オブジェクトを初期化
             except Exception as e:
                 print("Error during advertising or connection:", e)
                 await asyncio.sleep_ms(1000)
