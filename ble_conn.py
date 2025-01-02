@@ -9,16 +9,47 @@ import network
 from micropython import const
 
 
+def microbit_friendly_name(unique_id):
+    length = 5
+    letters = 5
+    codebook = [
+        ['z', 'v', 'g', 'p', 't'],
+        ['u', 'o', 'i', 'e', 'a'],
+        ['z', 'v', 'g', 'p', 't'],
+        ['u', 'o', 'i', 'e', 'a'],
+        ['z', 'v', 'g', 'p', 't']
+    ]
+    name = []
+
+    # Derive our name from the nrf51822's unique ID
+    # _, n = struct.unpack("II", machine.unique_id())
+    mac_padded = b'\x00\x00' + unique_id # 6バイトのMACアドレスを8バイトにパディング
+    _, n = struct.unpack('>II', mac_padded)
+    ld = 1;
+    d = letters;
+
+    for i in range(0, length):
+        h = (n % d) // ld;
+        n -= h;
+        d *= letters;
+        ld *= letters;
+        name.insert(0, codebook[i][h]);
+
+    return "".join(name);
+
 class BLEConnection:
     def __init__(self):
         # デバイス名を設定
         self.wlan = network.WLAN(network.STA_IF)
         self.wlan.active(True)
-        mac = self.wlan.config('mac')
+        self.mac = self.wlan.config('mac')
         # 下位バイトをドット区切りの10進数に変換
-        mac_str = '.'.join(str(b) for b in mac[-3:])
-        self.NAME = f"BBC micro:bit [{mac_str}]"
-        print(self.NAME,":",mac)
+        # mac_str = '.'.join(str(b) for b in mac[-3:])
+        # self.NAME = f"BBC micro:bit [{mac_str}]"
+        self.riendly_name = microbit_friendly_name(self.mac)
+        self.NAME = f"BBC micro:bit [{self.riendly_name}]"
+        print(self.NAME)
+        self.connection = None  # 接続オブジェクトを初期化
 
         # サービスUUIDと characteristic UUID を定義
         self.IOT_SERVICE_UUID = bluetooth.UUID('0b50f3e4-607f-4151-9091-7d008d6ffc5c')
@@ -68,6 +99,25 @@ class BLEConnection:
         )
         aioble.register_services(self.iot_service)
 
+    def send_notification(self, data):
+        if self.connection:
+            # print("Sending notification to", self.connection.device)
+            self.actionevent_characteristic.notify(self.connection, data)
+            # print("Notification sent")
+        else:
+            print("No connection available to send notification")
+
+    async def async_send_notification(self, data):
+        try:
+            if self.connection:
+                print("Sending notification to", self.connection.device)
+                await self.actionevent_characteristic.notify(self.connection, data)
+                print("Notification sent")
+            else:
+                print("No connection available to send notification")
+        except Exception as e:
+            print(f"Error in async_send_notification: {e}")
+
     def state_write(self, buffer):
         self.state_characteristic.write(buffer, send_update=True)
 
@@ -83,12 +133,18 @@ class BLEConnection:
                     appearance=self._ADV_APPEARANCE_GENERIC_TAG,
                 ) as connection:
                     print("Connection from", connection.device)
+                    self.connection = connection  # 接続オブジェクトを設定
                     # 送信する3バイトのデータを定義
-                    data_to_send = struct.pack('<BBB', 0x01, 0x02, 0x03)
+                    hardware = 2 # 1:MICROBIT_V1, 2:MICROBIT_V2
+                    protocol = 0
+                    route = 0   # 0:BLE, 1:SERIAL
+                    data_to_send = struct.pack('<BBB', hardware, protocol, route)
                     self.command_characteristic.write(data_to_send)
                     print("3バイト送信...") # 3バイトのデータを送信
-                    await connection.disconnected(timeout_ms=None)
-                    print("Disconnected.")
+                    # 切断理由を取得して表示
+                    reason = await connection.disconnected(timeout_ms=None)
+                    print(f"Disconnected. Reason: {reason}")
+                    self.connection = None  # 接続オブジェクトを初期化
             except Exception as e:
                 print("Error during advertising or connection:", e)
                 await asyncio.sleep_ms(1000)
@@ -107,7 +163,7 @@ class BLEConnection:
             # コマンドを待つ
             await self.command_characteristic.written()
             data = self.command_characteristic.read()
-            do_command(data)
+            do_command(data)    # コマンドを実行
 
 
     async def ble_task(self, do_command):

@@ -3,6 +3,7 @@ import os
 import sys
 import struct
 import asyncio
+import time
 from machine import Pin, I2C, ADC, PWM
 from ssd1306 import SSD1306_I2C
 from neopixel import NeoPixel
@@ -47,14 +48,16 @@ if 'ESP32C6' in device_info['machine']:
     adc1.atten(ADC.ATTN_11DB)    # 11dBの入力減衰率を設定(電圧範囲はおよそ 0.0v - 3.6v)
     adc1.width(ADC.WIDTH_12BIT)   # 12ビットの戻り値を設定(戻り値の範囲 0-4095)
     # スピーカー
-    sp01 = PWM(Pin(21, Pin.OUT), freq=440, duty=0)	# スピーカー
+    p00 = PWM(Pin(21, Pin.OUT), freq=440, duty=0)	# P00=スピーカー
+    p01 = PWM(Pin(19, Pin.OUT), freq=440, duty=0)	# P01
+    p02 = PWM(Pin(20, Pin.OUT), freq=440, duty=0)	# P02
     # Pin.IN
-    PIN3NAME = 'Pin(17)'
-    PIN5NAME = 'Pin(18)'
+    BTNA = 'Pin(17)'
+    BTNB = 'Pin(18)'
     PIN7NAME = 'Pin(21)'
-    pin3 = Pin(17, Pin.IN, Pin.PULL_UP)	# スイッチ
+    button_a = Pin(17, Pin.IN, Pin.PULL_UP)	# スイッチ
     # pin5 = Pin(21, Pin.IN, Pin.PULL_UP)	# スイッチ
-    pin7 = Pin(18, Pin.IN, Pin.PULL_UP)	# スイッチ
+    button_b = Pin(18, Pin.IN, Pin.PULL_UP)	# スイッチ
     # 
     np = NeoPixel(Pin(16, Pin.OUT), 4)	# GPIO 21 番に NeoPixel が4個接続されている
     # I2C
@@ -81,14 +84,14 @@ elif 'Raspberry Pi Pico W with RP2040' in device_info['machine']:
     # アナログ未利用
     adc0 = ADC(1)
     # スピーカー
-    sp01 = PWM(Pin(2, Pin.OUT))
+    p00 = PWM(Pin(2, Pin.OUT))
     # Pin.IN
-    PIN3NAME = 'Pin(GPIO3, mode=IN, pull=PULL_UP)'
-    PIN5NAME = 'Pin(GPIO5, mode=IN, pull=PULL_UP)'
+    BTNA = 'Pin(GPIO3, mode=IN, pull=PULL_UP)'
+    BTNB = 'Pin(GPIO5, mode=IN, pull=PULL_UP)'
     PIN7NAME = 'Pin(GPIO7, mode=IN, pull=PULL_UP)'
-    pin3 = Pin(3, Pin.IN, Pin.PULL_UP)	# スイッチ
+    button_a = Pin(3, Pin.IN, Pin.PULL_UP)	# スイッチ
     #pin5 = Pin(5, Pin.IN, Pin.PULL_UP)	# スイッチ
-    pin7 = Pin(7, Pin.IN, Pin.PULL_UP)	# スイッチ
+    button_b = Pin(7, Pin.IN, Pin.PULL_UP)	# スイッチ
     # 
     np = NeoPixel(Pin(21, Pin.OUT), 4)	# GPIO 21 番に NeoPixel が4個接続されている
     # I2C
@@ -108,24 +111,28 @@ else:
 
 # This would be periodically polling a hardware sensor.
 def send_sensor_value():
+    # state_characteristic に write する
+    # gpio_data(32bit) light_level(8bit) temperature(8bit) sound_level(8bit)
     # ピンの値を読み取って、デジタル入力データ (32ビット)のビットフィールドに格納
     gpio_data = (
-        (pin3.value() << 0) |
+        (button_a.value() << 0) |
         # (pin5.value() << 1) |
-        (pin7.value() << 2)
+        (button_b.value() << 2)
     )
     button_state = 0x00  # ボタンの状態 (24ビット)
-    light_level = int(adc1.read_u16()/65535*100)  # 明るさ (8ビット)
+    # light_level = int(adc1.read_u16()/65535*100)  # 明るさ (8ビット)
+    light_level = int(lux())  # 明るさ (8ビット)
+    light_level = max(0, min(255, light_level))  # 0から255の範囲に制限
     temperature = int(adc0.read_u16()/65535*100)  # 温度(0～255)
     sound_level = 0  # 音レベル (8ビット)
     buffer = struct.pack('<I3B', gpio_data, light_level, temperature, sound_level)
     # TODO: 送信するデータを更新
-    #ble_conn.state_write(buffer)
+    ble_conn.state_write(buffer)
 
 #
 def playtone(frequency, vol):
-    sp01.freq(int(frequency))  # Hz
-    sp01.duty_u16(int(vol*300))      #
+    p00.freq(int(frequency))  # Hz
+    p00.duty_u16(int(vol*300))      #
 
 
 def rgb(r, g, b):
@@ -139,19 +146,96 @@ pixcel(0, 0, 0, 0)
 
 # 音
 def _playTone(f, v):
-    sp01.freq(int(f))       	# Hz
-    sp01.duty_u16(int(v * 65535 / 100))	#
+    p00.freq(int(f))       	# Hz
+    p00.duty_u16(int(v * 65535 / 100))	#
+
+MbitMoreDataFormat = {
+    "CONFIG": 0x10,     # not used at this version
+    "PIN_EVENT": 0x11,
+    "ACTION_EVENT": 0x12,
+    "DATA_NUMBER": 0x13,
+    "DATA_TEXT": 0x14
+}
+MbitMoreActionEvent = {
+  "BUTTON": 0x01,
+  "GESTURE": 0x02
+}
+MbitMoreButtonID = {
+    1: 'A',
+    2: 'B',
+    100: 'P0',
+    101: 'P1',
+    102: 'P2',
+    121: 'LOGO'
+}
+MbitMoreButtonName = {v: k for k, v in MbitMoreButtonID.items()}
+
+MbitMoreButtonEventID = {
+    1: 'DOWN',
+    2: 'UP',
+    3: 'CLICK',
+    4: 'LONG_CLICK',
+    5: 'HOLD',
+    6: 'DOUBLE_CLICK'
+}
+# キーと値を入れ替えた辞書を定義
+MbitMoreButtonEventName = {v: k for k, v in MbitMoreButtonEventID.items()}
+
+
+# const dataFormat = dataView.getUint8(19);
+# dataFormat === MbitMoreDataFormat.ACTION_EVENT
+# button A が押されたときの処理
+# const actionEventType = dataView.getUint8(0);
+# 0: actionEventType=MbitMoreActionEvent.BUTTON
+# 1-2: const buttonName = MbitMoreButtonID[dataView.getUint16(1, true)];
+# 3: const eventName = MbitMoreButtonEventID[dataView.getUint8(3)];
+# 4-7: this.buttonEvents[buttonName][eventName] = dataView.getUint32(4, true); // Timestamp
+
+def on_press_a():
+    # バッファを定義して19バイト目をACTION_EVENTにする
+    # print("Buffer dump:")
+    buffer = bytearray(20)
+    buffer[19] = MbitMoreDataFormat["ACTION_EVENT"]
+    action = MbitMoreActionEvent["BUTTON"]      # byte
+    button = MbitMoreButtonName["A"]            # uint16
+    event = MbitMoreButtonEventName["DOWN"]     # byte
+    timestamp = int(time.time())                # uint32
+    packed_data = struct.pack('<BHBI', action, button, event, timestamp)
+    buffer[0:8] = packed_data
+    # print("Buffer dump:", buffer)
+    ble_conn.send_notification(buffer)
+
+def on_release_a():
+    pass
+
+def on_press_b222(pin):
+    # バッファを定義して19バイト目をACTION_EVENTにする
+    print("on_press_b:", pin)
+    buffer = bytearray(20)
+    buffer[19] = MbitMoreDataFormat["ACTION_EVENT"]
+    action = MbitMoreActionEvent["BUTTON"]      # byte
+    button = MbitMoreButtonName["B"]            # uint16
+    event = MbitMoreButtonEventName["DOWN"]     # byte
+    timestamp = int(time.time())                # uint32
+    packed_data = struct.pack('<BHBI', action, button, event, timestamp)
+    buffer[0:8] = packed_data
+    # print("Buffer dump:", buffer)
+    ble_conn.send_notification(buffer)
 
 def cb03( pin ):
-    send_sensor_value() # BLE
-    #print(str(pin))
+    # send_sensor_value() # BLE
+    # print(str(pin))
     if pin.value()==0:
-        if str(pin) == PIN3NAME:
+        if str(pin) == BTNA:    # Button A
+            # print("on_press_a")
+            on_press_a()
+            # print("on_press_a done")
             _playTone(392, 50)	# G 392
             pixcel(0, 100, 0, 0)
             pixcel(1, 0, 100, 0)
             pixcel(2, 0, 0, 100)
-        elif str(pin) == PIN7NAME:
+        elif str(pin) == BTNB:  # Button B
+            # on_press_b()
             _playTone(329, 50)	# G 392
             pixcel(2, 100, 0, 0)
             pixcel(0, 0, 100, 0)
@@ -162,15 +246,76 @@ def cb03( pin ):
             pixcel(2, 0, 100, 0)
             pixcel(0, 0, 0, 100)
     else:
+        on_release_a()
         _playTone(440, 0)
         pixcel(0, 0, 0, 0)
         pixcel(1, 0, 0, 0)
         pixcel(2, 0, 0, 0)
 
 
-pin3.irq(cb03)
+# button_a.irq(cb03)
 # pin5.irq(cb03)
-pin7.irq(cb03)
+
+# 同期関数でラップ
+# def on_press_b(pin):
+#    asyncio.create_task(async_on_press_b(pin))
+
+# button_b.irq(on_press_b)
+
+def send_notification(buffer):
+    # asyncio.create_task(ble_conn.async_send_notification(buffer))
+    ble_conn.send_notification(buffer)
+
+
+def button_notification(buttonName, eventName):
+    # バッファを定義して19バイト目をACTION_EVENTにする
+    buffer = bytearray(20)
+    buffer[19] = MbitMoreDataFormat["ACTION_EVENT"]
+    action = MbitMoreActionEvent["BUTTON"]      # byte
+    button = MbitMoreButtonName[buttonName]            # uint16
+    event = MbitMoreButtonEventName[eventName]     # byte
+    timestamp = time.ticks_ms()                # uint32
+    packed_data = struct.pack('<BHBI', action, button, event, timestamp)
+    buffer[0:8] = packed_data
+    # print("Buffer dump:", buffer)
+    send_notification(buffer)
+
+
+# ボタンの状態を保持する変数
+button_state = {
+    'A': {'pressed': False, 'press_time': 0, 'down_count': 0},
+    'B': {'pressed': False, 'press_time': 0, 'down_count': 0}
+}
+
+# ボタンの処理
+def handle_button_event(pin, button_name):
+    global button_state
+    if pin.value() == 0:  # ボタンが押された
+        if not button_state[button_name]['pressed']:
+            button_state[button_name]['pressed'] = True
+            button_state[button_name]['press_time'] = time.ticks_ms()
+            button_state[button_name]['down_count'] += 1
+            print(f"Button {button_name} DOWN, Count: {button_state[button_name]['down_count']}")
+            # DOWNイベントの処理
+            button_notification(button_name, "DOWN")
+    else:  # ボタンが離された
+        if button_state[button_name]['pressed']:
+            button_state[button_name]['pressed'] = False
+            press_duration = time.ticks_diff(time.ticks_ms(), button_state[button_name]['press_time'])
+            if press_duration < 500:
+                # print(f"Button {button_name} CLICK")
+                # CLICKイベントの処理
+                button_notification(button_name, "CLICK")
+                # ble_conn.send_notification(f'Button {button_name} CLICK'.encode())
+            else:
+                # print(f"Button {button_name} UP")
+                # UPイベントの処理
+                button_notification(button_name, "UP")
+                # ble_conn.send_notification(f'Button {button_name} UP'.encode())
+
+# IRQハンドラとして登録
+button_a.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: handle_button_event(pin, 'A'))
+button_b.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: handle_button_event(pin, 'B'))
 
 
 # 明るさ
@@ -193,8 +338,9 @@ async def disp_task():
         sd = "A1   :{:05d}".format(sound)
         #print(sound)
         #print(am312.read_u16())
-        oled.fill(0)
-        oled.text(ble_conn.NAME[-16:], 0, 0)
+        # 上10ドットをそのままにして、下の部分だけ書き直す
+        oled.fill_rect(0, 10, oled.width, oled.height - 10, 0)
+        # oled.text(ble_conn.NAME[-16:], 0, 0)
         oled.text(temp, 0, 8*2)
         oled.text(humi, 0, 8*3)
         oled.text(lx, 0, 8*4)
@@ -203,8 +349,28 @@ async def disp_task():
         oled.show()
         await asyncio.sleep_ms(500)
 
+# 文字 s を t ミリ秒間隔で流す
+def scroll(s, t):
+    print(f"文字 {s} を {t} ミリ秒間隔で流す")
+    # 上10ドットを消去
+    oled.fill_rect(0, 0, oled.width, 10, 0)
+    oled.text(s, 0, 0)
+    oled.show()
+
+# ピン pin をアナログ出力 n %にする (n:0-1024)
+# TODO: pin1->pin19, pin2->pin20にする
+def analog_out(pin, n):
+    # print(f"ピン {pin} をアナログ出力 {n} %にする")
+    if pin == 0 or pin == 21:
+        p00.duty_u16(int(65535 * n / 1024))
+    elif pin == 1 or pin == 19:
+        p01.duty_u16(int(65535 * n / 1024))
+    elif pin == 2 or pin == 20:
+        p02.duty_u16(int(65535 * n / 1024))
+
+# コマンドを実行
 def do_command(data):
-    print(data)
+    # print(data)
     # Base64 エンコード
     #binary_data = ubinascii.b2a_base64(data).strip()
     #print(binary_data)  # 出力: b'\x01Hello'
@@ -217,19 +383,21 @@ def do_command(data):
     #print("Command ID:", command_id)  # 出力: Command ID: 1
     #print("Command Message:", command_message)  # 出力: Command Message: [72, 101, 108, 108, 111]
     command_id = data_list[0]
-    print(command_id)
-    command_message = data[1:]
+    # print(command_id)
+    # command_message = data[1:]
     if command_id == 65:
-        #print("文字", data[2:].decode('utf-8'),"間隔", data[1]*10)
-        oled.fill(0)
-        oled.text(data[2:].decode('utf-8'), 0, data[1]*10)
-        oled.show()
+        # 文字 s を t ミリ秒間隔で流す
+        scroll(data[2:].decode('utf-8'), data[1])
+    elif command_id == 34:
+        # ピン pin をアナログ出力 n %にする
+        pin = data[1]
+        uint16_value = struct.unpack('<H', data[2:4])[0]     # 続く2バイトを数値に変換
+        # print("ピン", pin, "をアナログ出力", uint16_value, "%にする")
+        analog_out(pin, uint16_value)
     elif command_id == 97:
-        # data[2:] から4バイトを取得
-        four_bytes = data[1:5]
-        # 4バイトを uint32 の数値に変換
-        uint32_value = struct.unpack('<I', four_bytes)[0]
-        #print("音", 1000000 / uint32_value, "大きさ", data[5]/255*100)
+        # 1000000/data[1:5] Hzの音を data[5]/255*100 %の大きさで鳴らす
+        four_bytes = data[1:5]  # data[2:] から4バイトを取得
+        uint32_value = struct.unpack('<I', four_bytes)[0]   # 4バイトを uint32 の数値に変換
         playtone(1000000 / uint32_value, data[5]/255*100)
     elif command_id == 3:
         print("Command ID 3: Thank you")
@@ -242,13 +410,16 @@ def do_command(data):
 async def sensor_task():
     while True:
         send_sensor_value()
-        await asyncio.sleep_ms(500)
+        await asyncio.sleep_ms(250)
 
 
 async def main():
     t1 = asyncio.create_task(ble_conn.ble_task(do_command))
     t2 = asyncio.create_task(disp_task())
     t3 = asyncio.create_task(sensor_task())
-    await asyncio.gather(t1, t2, t3)
+    while True:
+        await asyncio.sleep(1)
+    # await asyncio.gather(t1, t2, t3)
+    # print("main() done!!")
 
 asyncio.run(main())
