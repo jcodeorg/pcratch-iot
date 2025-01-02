@@ -47,7 +47,9 @@ if 'ESP32C6' in device_info['machine']:
     adc1.atten(ADC.ATTN_11DB)    # 11dBの入力減衰率を設定(電圧範囲はおよそ 0.0v - 3.6v)
     adc1.width(ADC.WIDTH_12BIT)   # 12ビットの戻り値を設定(戻り値の範囲 0-4095)
     # スピーカー
-    sp01 = PWM(Pin(21, Pin.OUT), freq=440, duty=0)	# スピーカー
+    p00 = PWM(Pin(21, Pin.OUT), freq=440, duty=0)	# P00=スピーカー
+    p01 = PWM(Pin(19, Pin.OUT), freq=440, duty=0)	# P01
+    p02 = PWM(Pin(20, Pin.OUT), freq=440, duty=0)	# P02
     # Pin.IN
     PIN3NAME = 'Pin(17)'
     PIN5NAME = 'Pin(18)'
@@ -81,7 +83,7 @@ elif 'Raspberry Pi Pico W with RP2040' in device_info['machine']:
     # アナログ未利用
     adc0 = ADC(1)
     # スピーカー
-    sp01 = PWM(Pin(2, Pin.OUT))
+    p00 = PWM(Pin(2, Pin.OUT))
     # Pin.IN
     PIN3NAME = 'Pin(GPIO3, mode=IN, pull=PULL_UP)'
     PIN5NAME = 'Pin(GPIO5, mode=IN, pull=PULL_UP)'
@@ -115,7 +117,9 @@ def send_sensor_value():
         (pin7.value() << 2)
     )
     button_state = 0x00  # ボタンの状態 (24ビット)
-    light_level = int(adc1.read_u16()/65535*100)  # 明るさ (8ビット)
+    # light_level = int(adc1.read_u16()/65535*100)  # 明るさ (8ビット)
+    light_level = int(lux())  # 明るさ (8ビット)
+    light_level = max(0, min(255, light_level))  # 0から255の範囲に制限
     temperature = int(adc0.read_u16()/65535*100)  # 温度(0～255)
     sound_level = 0  # 音レベル (8ビット)
     buffer = struct.pack('<I3B', gpio_data, light_level, temperature, sound_level)
@@ -124,8 +128,8 @@ def send_sensor_value():
 
 #
 def playtone(frequency, vol):
-    sp01.freq(int(frequency))  # Hz
-    sp01.duty_u16(int(vol*300))      #
+    p00.freq(int(frequency))  # Hz
+    p00.duty_u16(int(vol*300))      #
 
 
 def rgb(r, g, b):
@@ -139,8 +143,8 @@ pixcel(0, 0, 0, 0)
 
 # 音
 def _playTone(f, v):
-    sp01.freq(int(f))       	# Hz
-    sp01.duty_u16(int(v * 65535 / 100))	#
+    p00.freq(int(f))       	# Hz
+    p00.duty_u16(int(v * 65535 / 100))	#
 
 def cb03( pin ):
     send_sensor_value() # BLE
@@ -193,8 +197,9 @@ async def disp_task():
         sd = "A1   :{:05d}".format(sound)
         #print(sound)
         #print(am312.read_u16())
-        oled.fill(0)
-        oled.text(ble_conn.NAME[-16:], 0, 0)
+        # 上10ドットをそのままにして、下の部分だけ書き直す
+        oled.fill_rect(0, 10, oled.width, oled.height - 10, 0)
+        # oled.text(ble_conn.NAME[-16:], 0, 0)
         oled.text(temp, 0, 8*2)
         oled.text(humi, 0, 8*3)
         oled.text(lx, 0, 8*4)
@@ -203,8 +208,28 @@ async def disp_task():
         oled.show()
         await asyncio.sleep_ms(500)
 
+# 文字 s を t ミリ秒間隔で流す
+def scroll(s, t):
+    print(f"文字 {s} を {t} ミリ秒間隔で流す")
+    # 上10ドットを消去
+    oled.fill_rect(0, 0, oled.width, 10, 0)
+    oled.text(s, 0, 0)
+    oled.show()
+
+# ピン pin をアナログ出力 n %にする (n:0-1024)
+# TODO: pin1->pin19, pin2->pin20にする
+def analog_out(pin, n):
+    # print(f"ピン {pin} をアナログ出力 {n} %にする")
+    if pin == 0 or pin == 21:
+        p00.duty_u16(int(65535 * n / 1024))
+    elif pin == 1 or pin == 19:
+        p01.duty_u16(int(65535 * n / 1024))
+    elif pin == 2 or pin == 20:
+        p02.duty_u16(int(65535 * n / 1024))
+
+# コマンドを実行
 def do_command(data):
-    print(data)
+    # print(data)
     # Base64 エンコード
     #binary_data = ubinascii.b2a_base64(data).strip()
     #print(binary_data)  # 出力: b'\x01Hello'
@@ -217,19 +242,21 @@ def do_command(data):
     #print("Command ID:", command_id)  # 出力: Command ID: 1
     #print("Command Message:", command_message)  # 出力: Command Message: [72, 101, 108, 108, 111]
     command_id = data_list[0]
-    print(command_id)
-    command_message = data[1:]
+    # print(command_id)
+    # command_message = data[1:]
     if command_id == 65:
-        #print("文字", data[2:].decode('utf-8'),"間隔", data[1]*10)
-        oled.fill(0)
-        oled.text(data[2:].decode('utf-8'), 0, data[1]*10)
-        oled.show()
+        # 文字 s を t ミリ秒間隔で流す
+        scroll(data[2:].decode('utf-8'), data[1])
+    elif command_id == 34:
+        # ピン pin をアナログ出力 n %にする
+        pin = data[1]
+        uint16_value = struct.unpack('<H', data[2:4])[0]     # 続く2バイトを数値に変換
+        # print("ピン", pin, "をアナログ出力", uint16_value, "%にする")
+        analog_out(pin, uint16_value)
     elif command_id == 97:
-        # data[2:] から4バイトを取得
-        four_bytes = data[1:5]
-        # 4バイトを uint32 の数値に変換
-        uint32_value = struct.unpack('<I', four_bytes)[0]
-        #print("音", 1000000 / uint32_value, "大きさ", data[5]/255*100)
+        # 1000000/data[1:5] Hzの音を data[5]/255*100 %の大きさで鳴らす
+        four_bytes = data[1:5]  # data[2:] から4バイトを取得
+        uint32_value = struct.unpack('<I', four_bytes)[0]   # 4バイトを uint32 の数値に変換
         playtone(1000000 / uint32_value, data[5]/255*100)
     elif command_id == 3:
         print("Command ID 3: Thank you")
