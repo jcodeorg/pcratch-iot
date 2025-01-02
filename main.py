@@ -24,8 +24,6 @@ def get_device_info():
     }
 
 device_info = get_device_info()
-print(device_info)
-
 if 'ESP32C6' in device_info['machine']:
     print("Welcome to ESP32C6")
     # ESP32C6 Pin layout
@@ -40,7 +38,7 @@ if 'ESP32C6' in device_info['machine']:
     am312 = ADC(Pin(0, Pin.IN))
     am312.atten(ADC.ATTN_6DB)    # 6dBの入力減衰率を設定
     # am312.width(ADC.WIDTH_12BIT)   # 12ビットの戻り値を設定(戻り値の範囲 0-4095)
-    # 温度なし
+    # アナログ未利用
     adc0 = ADC(Pin(1, Pin.IN))
     #adc0.atten(ADC.ATTN_6DB)
     #adc0.width(ADC.WIDTH_12BIT)   # 12ビットの戻り値を設定(戻り値の範囲 0-4095)
@@ -49,22 +47,59 @@ if 'ESP32C6' in device_info['machine']:
     adc1.atten(ADC.ATTN_11DB)    # 11dBの入力減衰率を設定(電圧範囲はおよそ 0.0v - 3.6v)
     adc1.width(ADC.WIDTH_12BIT)   # 12ビットの戻り値を設定(戻り値の範囲 0-4095)
     # スピーカー
-    sp01 = PWM(Pin(19, Pin.OUT), freq=440, duty=0)	# スピーカー
-    # I2C
-    SDA = 22
-    SCL = 23
+    sp01 = PWM(Pin(21, Pin.OUT), freq=440, duty=0)	# スピーカー
     # Pin.IN
+    PIN3NAME = 'Pin(17)'
+    PIN5NAME = 'Pin(18)'
+    PIN7NAME = 'Pin(21)'
     pin3 = Pin(17, Pin.IN, Pin.PULL_UP)	# スイッチ
-    pin5 = Pin(21, Pin.IN, Pin.PULL_UP)	# スイッチ
+    # pin5 = Pin(21, Pin.IN, Pin.PULL_UP)	# スイッチ
     pin7 = Pin(18, Pin.IN, Pin.PULL_UP)	# スイッチ
     # 
     np = NeoPixel(Pin(16, Pin.OUT), 4)	# GPIO 21 番に NeoPixel が4個接続されている
+    # I2C
+    i2c = I2C(0, scl=Pin(23), sda=Pin(22)) # I2C初期化
+    display = SSD1306_I2C(128, 64, i2c) #(幅, 高さ, I2Cオブジェクト)
+    # 画面をさかさまにするコマンドを送信
+    display.write_cmd(0xA0)  # セグメントリマップ
+    display.write_cmd(0xC0)  # COM出力スキャン方向
 
-    i2c = I2C(0, scl=Pin(SCL), sda=Pin(SDA)) # I2C初期化
+    # AHT20 センサー
+    aht21 = AHT20(i2c)
+
+elif 'Raspberry Pi Pico W with RP2040' in device_info['machine']:
+    # 人感センサ
+    am312 = None
+
+    # am312.width(ADC.WIDTH_12BIT)   # 12ビットの戻り値を設定(戻り値の範囲 0-4095)
+    # 明るさ
+    adc1 = ADC(0)
+    # アナログ未利用
+    adc0 = ADC(1)
+    # スピーカー
+    sp01 = PWM(Pin(2, Pin.OUT))
+    # Pin.IN
+    PIN3NAME = 'Pin(GPIO3, mode=IN, pull=PULL_UP)'
+    PIN5NAME = 'Pin(GPIO5, mode=IN, pull=PULL_UP)'
+    PIN7NAME = 'Pin(GPIO7, mode=IN, pull=PULL_UP)'
+    pin3 = Pin(3, Pin.IN, Pin.PULL_UP)	# スイッチ
+    #pin5 = Pin(5, Pin.IN, Pin.PULL_UP)	# スイッチ
+    pin7 = Pin(7, Pin.IN, Pin.PULL_UP)	# スイッチ
+    # 
+    np = NeoPixel(Pin(21, Pin.OUT), 4)	# GPIO 21 番に NeoPixel が4個接続されている
+    # I2C
+    i2c = I2C(0, scl=Pin(1), sda=Pin(0)) # I2C初期化
     display = SSD1306_I2C(128, 64, i2c) #(幅, 高さ, I2Cオブジェクト)
     aht21 = AHT20(i2c)
+
+    # VSYS電源電圧を取得する
+    def getVsys():
+        Pin(29, Pin.IN)
+        volt = ADC(3).read_u16() / 65535 * 3.3 * 3
+        return volt
+
 else:
-    print("This device is not supported.")
+    print("This device is not supported.:", device_info['machine'])
 
 
 # This would be periodically polling a hardware sensor.
@@ -72,15 +107,16 @@ def send_sensor_value():
     # ピンの値を読み取って、デジタル入力データ (32ビット)のビットフィールドに格納
     gpio_data = (
         (pin3.value() << 0) |
-        (pin5.value() << 1) |
+        # (pin5.value() << 1) |
         (pin7.value() << 2)
     )
     button_state = 0x00  # ボタンの状態 (24ビット)
-    light_level = int(adc1.read()/4095*255)  # 明るさ (8ビット)
-    temperature = int(adc0.read()/4095*255)  # 温度(0～255)
+    light_level = int(adc1.read_u16()/65535*100)  # 明るさ (8ビット)
+    temperature = int(adc0.read_u16()/65535*100)  # 温度(0～255)
     sound_level = 0  # 音レベル (8ビット)
     buffer = struct.pack('<I3B', gpio_data, light_level, temperature, sound_level)
-    ble_conn.state_write(buffer)
+    # TODO: 送信するデータを更新
+    #ble_conn.state_write(buffer)
 
 #
 def playtone(frequency, vol):
@@ -104,27 +140,32 @@ def _playTone(f, v):
 
 def cb03( pin ):
     send_sensor_value() # BLE
+    #print(str(pin))
     if pin.value()==0:
-        if str(pin) == 'Pin(17)':
+        if str(pin) == PIN3NAME:
             _playTone(392, 50)	# G 392
             pixcel(0, 100, 0, 0)
-            pixcel(1, 50, 0, 50)
-        elif str(pin) == 'Pin(18)':
+            pixcel(1, 0, 100, 0)
+            pixcel(2, 0, 0, 100)
+        elif str(pin) == PIN7NAME:
             _playTone(329, 50)	# G 392
+            pixcel(2, 100, 0, 0)
             pixcel(0, 0, 100, 0)
-            pixcel(1, 50, 50, 0)
+            pixcel(1, 0, 0, 100)
         else:
             _playTone(440, 50)	# G 392
+            pixcel(1, 100, 0, 0)
+            pixcel(2, 0, 100, 0)
             pixcel(0, 0, 0, 100)
-            pixcel(1, 0, 50, 50)
     else:
         _playTone(440, 0)
         pixcel(0, 0, 0, 0)
         pixcel(1, 0, 0, 0)
+        pixcel(2, 0, 0, 0)
 
 
 pin3.irq(cb03)
-pin5.irq(cb03)
+# pin5.irq(cb03)
 pin7.irq(cb03)
 
 
@@ -142,7 +183,7 @@ async def disp_task():
         humi ="hum :{:6.1f}".format(humidity)
         lx   ="lx:  {:6.0f}".format(lux())
         # 人感センサーから16ビットのデータを読み取る
-        hs_value = am312.read_u16()
+        hs_value = am312.read_u16() if am312 else 0
         hs = "Human:{:05d}".format(hs_value)
         sound = adc0.read_u16()
         sd = "A1   :{:05d}".format(sound)
