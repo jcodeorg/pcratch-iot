@@ -186,12 +186,8 @@ MbitMoreButtonEventName = {v: k for k, v in MbitMoreButtonEventID.items()}
 # dataFormat === MbitMoreDataFormat.ACTION_EVENT
 # button A が押されたときの処理
 # const actionEventType = dataView.getUint8(0);
-# 0: actionEventType=MbitMoreActionEvent.BUTTON
-# 1-2: const buttonName = MbitMoreButtonID[dataView.getUint16(1, true)];
-# 3: const eventName = MbitMoreButtonEventID[dataView.getUint8(3)];
-# 4-7: this.buttonEvents[buttonName][eventName] = dataView.getUint32(4, true); // Timestamp
 
-def on_press_a():
+def on_press_a222():
     # バッファを定義して19バイト目をACTION_EVENTにする
     # print("Buffer dump:")
     buffer = bytearray(20)
@@ -205,22 +201,9 @@ def on_press_a():
     # print("Buffer dump:", buffer)
     ble_conn.send_notification(buffer)
 
-def on_release_a():
+def on_release_a222():
     pass
 
-def on_press_b222(pin):
-    # バッファを定義して19バイト目をACTION_EVENTにする
-    print("on_press_b:", pin)
-    buffer = bytearray(20)
-    buffer[19] = MbitMoreDataFormat["ACTION_EVENT"]
-    action = MbitMoreActionEvent["BUTTON"]      # byte
-    button = MbitMoreButtonName["B"]            # uint16
-    event = MbitMoreButtonEventName["DOWN"]     # byte
-    timestamp = int(time.time())                # uint32
-    packed_data = struct.pack('<BHBI', action, button, event, timestamp)
-    buffer[0:8] = packed_data
-    # print("Buffer dump:", buffer)
-    ble_conn.send_notification(buffer)
 
 def cb03( pin ):
     # send_sensor_value() # BLE
@@ -228,7 +211,7 @@ def cb03( pin ):
     if pin.value()==0:
         if str(pin) == BTNA:    # Button A
             # print("on_press_a")
-            on_press_a()
+            # on_press_a()
             # print("on_press_a done")
             _playTone(392, 50)	# G 392
             pixcel(0, 100, 0, 0)
@@ -246,40 +229,34 @@ def cb03( pin ):
             pixcel(2, 0, 100, 0)
             pixcel(0, 0, 0, 100)
     else:
-        on_release_a()
+        # on_release_a()
         _playTone(440, 0)
         pixcel(0, 0, 0, 0)
         pixcel(1, 0, 0, 0)
         pixcel(2, 0, 0, 0)
 
 
-# button_a.irq(cb03)
-# pin5.irq(cb03)
 
-# 同期関数でラップ
-# def on_press_b(pin):
-#    asyncio.create_task(async_on_press_b(pin))
-
-# button_b.irq(on_press_b)
-
-def send_notification(buffer):
+def send_notification222(buffer):
     # asyncio.create_task(ble_conn.async_send_notification(buffer))
     ble_conn.send_notification(buffer)
 
-
+# 0: actionEventType=MbitMoreActionEvent.BUTTON
+# 1-2: const buttonName = MbitMoreButtonID[dataView.getUint16(1, true)];
+# 3: const eventName = MbitMoreButtonEventID[dataView.getUint8(3)];
+# 4-7: this.buttonEvents[buttonName][eventName] = dataView.getUint32(4, true); // Timestamp
 def button_notification(buttonName, eventName):
     # バッファを定義して19バイト目をACTION_EVENTにする
     buffer = bytearray(20)
     buffer[19] = MbitMoreDataFormat["ACTION_EVENT"]
-    action = MbitMoreActionEvent["BUTTON"]      # byte
-    button = MbitMoreButtonName[buttonName]            # uint16
-    event = MbitMoreButtonEventName[eventName]     # byte
-    timestamp = time.ticks_ms()                # uint32
+    action = MbitMoreActionEvent["BUTTON"]      # 0: byte
+    button = MbitMoreButtonName[buttonName]     # 1-2: uint16
+    event = MbitMoreButtonEventName[eventName]  # 3: byte
+    timestamp = time.ticks_ms()                 # 4-7: uint32
     packed_data = struct.pack('<BHBI', action, button, event, timestamp)
     buffer[0:8] = packed_data
     # print("Buffer dump:", buffer)
-    send_notification(buffer)
-
+    ble_conn.send_notification(buffer)
 
 # ボタンの状態を保持する変数
 button_state = {
