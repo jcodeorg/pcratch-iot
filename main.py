@@ -1,4 +1,4 @@
-# ESP32C6 BLE pcratch(micro:bit) v1.0.3
+# ESP32C6 BLE pcratch-IoT(micro:bit) v1.1.0
 import os
 import sys
 import struct
@@ -65,8 +65,9 @@ if 'ESP32C6' in device_info['machine']:
     try:
         oled = SSD1306_I2C(128, 64, i2c)  #(幅, 高さ, I2Cオブジェクト)
         # 画面をさかさまにするコマンドを送信
-        oled.write_cmd(0xA0)  # セグメントリマップ
-        oled.write_cmd(0xC0)  # COM出力スキャン方向
+        if False:
+            oled.write_cmd(0xA0)  # セグメントリマップ
+            oled.write_cmd(0xC0)  # COM出力スキャン方向
     except Exception as e:
         print(f"Error initializing oled: {e}")
         oled = None  # oledをNoneに設定してプログラムが続行できるようにする
@@ -289,6 +290,7 @@ def handle_button_event(pin, button_name):
                 # UPイベントの処理
                 button_notification(button_name, "UP")
                 # ble_conn.send_notification(f'Button {button_name} UP'.encode())
+
 
 # IRQハンドラとして登録
 button_a.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: handle_button_event(pin, 'A'))
