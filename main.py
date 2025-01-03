@@ -1,4 +1,5 @@
 # ESP32C6 BLE pcratch-IoT(micro:bit) v1.1.0
+import network
 import os
 import sys
 import struct
@@ -183,29 +184,6 @@ MbitMoreButtonEventID = {
 MbitMoreButtonEventName = {v: k for k, v in MbitMoreButtonEventID.items()}
 
 
-# const dataFormat = dataView.getUint8(19);
-# dataFormat === MbitMoreDataFormat.ACTION_EVENT
-# button A が押されたときの処理
-# const actionEventType = dataView.getUint8(0);
-
-def on_press_a222():
-    # バッファを定義して19バイト目をACTION_EVENTにする
-    # print("Buffer dump:")
-    buffer = bytearray(20)
-    buffer[19] = MbitMoreDataFormat["ACTION_EVENT"]
-    action = MbitMoreActionEvent["BUTTON"]      # byte
-    button = MbitMoreButtonName["A"]            # uint16
-    event = MbitMoreButtonEventName["DOWN"]     # byte
-    timestamp = int(time.time())                # uint32
-    packed_data = struct.pack('<BHBI', action, button, event, timestamp)
-    buffer[0:8] = packed_data
-    # print("Buffer dump:", buffer)
-    ble_conn.send_notification(buffer)
-
-def on_release_a222():
-    pass
-
-
 def cb03( pin ):
     # send_sensor_value() # BLE
     # print(str(pin))
@@ -235,12 +213,6 @@ def cb03( pin ):
         pixcel(0, 0, 0, 0)
         pixcel(1, 0, 0, 0)
         pixcel(2, 0, 0, 0)
-
-
-
-def send_notification222(buffer):
-    # asyncio.create_task(ble_conn.async_send_notification(buffer))
-    ble_conn.send_notification(buffer)
 
 # 0: actionEventType=MbitMoreActionEvent.BUTTON
 # 1-2: const buttonName = MbitMoreButtonID[dataView.getUint16(1, true)];
@@ -303,8 +275,8 @@ def lux():
     return val
 
 
-async def disp_task():
-    while True:
+# センサーの値を表示
+def disp_sensor_value():
         temperature = aht21.temperature
         humidity = aht21.relative_humidity
         temp ="temp:{:6.1f}".format(temperature)
@@ -326,7 +298,6 @@ async def disp_task():
         oled.text(hs, 0, 8*5)
         oled.text(sd, 0, 8*6)
         oled.show()
-        await asyncio.sleep_ms(500)
 
 # 文字 s を t ミリ秒間隔で流す
 def scroll(s, t):
@@ -385,20 +356,50 @@ def do_command(data):
     else:
         print("Command ID", command_id, "is not defined.")
 
-
+# センサーの値を定期的に送信
 async def sensor_task():
     while True:
         send_sensor_value()
         await asyncio.sleep_ms(250)
 
+from time_weather import TimeWeather
 
 async def main():
     t1 = asyncio.create_task(ble_conn.ble_task(do_command))
-    t2 = asyncio.create_task(disp_task())
+    disp_sensor_value()
     t3 = asyncio.create_task(sensor_task())
-    while True:
+    # WiFiに接続
+    SSID = 'AirMacPelWi-Fi'
+    PASSWORD = '78787878'
+    wlan = network.WLAN(network.STA_IF)
+    wlan.active(True)
+    wlan.connect(SSID, PASSWORD)
+    while not wlan.isconnected():
+        disp_sensor_value()
         await asyncio.sleep(1)
-    # await asyncio.gather(t1, t2, t3)
-    # print("main() done!!")
+    print('WiFi connected:', wlan.ifconfig())
+
+    clock = TimeWeather(oled, aht21)
+    # await clock.connect_wifi(SSID, PASSWORD)
+    # 現在時刻を取得
+    await clock.get_ntptime()
+    # 天気情報を取得
+    await clock.fetch_weather("東京")
+    await asyncio.sleep(1)
+    clock.print_memory_usage()
+    # clock.load_misakifont()
+    # clock.print_memory_usage()
+
+    # 時刻表示と天気表示を10秒ずつ交代で行う
+    while True:
+        for _ in range(10):
+            clock.display_time()
+            await asyncio.sleep(1)
+        clock.display_weather()
+        clock.print_memory_usage()
+        await asyncio.sleep(10)
+        for _ in range(10):
+            disp_sensor_value()
+            await asyncio.sleep(1)
 
 asyncio.run(main())
