@@ -1,4 +1,4 @@
-# ESP32C6 BLE pcratch-IoT(micro:bit) v1.1.1
+# ESP32C6 BLE pcratch-IoT(micro:bit) v1.1.2
 import network
 import os
 import struct
@@ -26,32 +26,33 @@ if 'ESP32C6' in device_info.machine:
     # GPIO16:TX :       GPIO17:RX :
     print("Welcome to ESP32C6")
     # ADC
-    am312 = ADC(Pin(0, Pin.IN)) # ADC0:人感センサ
-    am312.atten(ADC.ATTN_6DB)   # 6dBの入力減衰率を設定
-    adc0 = ADC(Pin(1, Pin.IN))  # ADC1:未使用
-    adc1 = ADC(Pin(2, Pin.IN))  # ADC2:明るさ
-    adc1.atten(ADC.ATTN_11DB)   # 11dBの入力減衰率を設定(電圧範囲はおよそ 0.0v - 3.6v)
-    adc1.width(ADC.WIDTH_12BIT) # 12ビットの戻り値を設定(戻り値の範囲 0-4095)
+    adc0 = Pin(0, Pin.IN, Pin.PULL_DOWN) # ADC0:人感センサ
+    adc1 = ADC(Pin(1, Pin.IN))  # adc2:未使用
+    adc2 = ADC(Pin(2, Pin.IN))  # ADC2:明るさ
+    adc2.atten(ADC.ATTN_11DB)   # 11dBの入力減衰率を設定(電圧範囲はおよそ 0.0v - 3.6v)
+    adc2.width(ADC.WIDTH_12BIT) # 12ビットの戻り値を設定(戻り値の範囲 0-4095)
     # Pin.OUT
-    out0 = PWM(Pin(21, Pin.OUT), freq=440, duty=0)	# out0:スピーカー
-    out1 = PWM(Pin(19, Pin.OUT), freq=440, duty=0)	# out1
-    out2 = PWM(Pin(20, Pin.OUT), freq=440, duty=0)	# out2
-    np = NeoPixel(Pin(16, Pin.OUT), 4)          	# out3:NeoPixel が4個接続されている
+    out0 = PWM(Pin(21, Pin.OUT), freq=50, duty=0)	# out0:スピーカー
+    out1 = PWM(Pin(19, Pin.OUT), freq=50, duty=0)	# out1
+    out2 = PWM(Pin(20, Pin.OUT), freq=50, duty=0)	# out2
+    out3 = NeoPixel(Pin(16, Pin.OUT), 4)          	# out3:NeoPixel が4個接続されている
     # Pin.IN
     inp0 = Pin(17, Pin.IN, Pin.PULL_UP)	# ボタンA
     inp1 = Pin(18, Pin.IN, Pin.PULL_UP)	# ボタンB
     # I2C
     i2c = I2C(0, scl=Pin(23), sda=Pin(22))  # I2C初期化
-    oled = None # oled ディスプレイ
-    aht20 = None # AHT20 温湿度センサ
+    # oled ディスプレイ
+    oled = None
     try:
         oled = SSD1306_I2C(128, 64, i2c)  #(幅, 高さ, I2Cオブジェクト)
         # 画面をさかさまにするコマンドを送信
-        if False:
+        if True:
             oled.write_cmd(0xA0)  # セグメントリマップ
             oled.write_cmd(0xC0)  # COM出力スキャン方向
     except Exception as e:
         print(f"Error initializing oled: {e}")
+    # AHT20 温湿度センサ
+    aht20 = None
     try:
         aht20 = AHT20(i2c)        # AHT20 センサー
     except Exception as e:
@@ -59,20 +60,20 @@ if 'ESP32C6' in device_info.machine:
 
 elif 'Raspberry Pi Pico W with RP2040' in device_info.machine:
     # 人感センサ
-    am312 = None
+    adc0 = None
 
     # am312.width(ADC.WIDTH_12BIT)   # 12ビットの戻り値を設定(戻り値の範囲 0-4095)
     # 明るさ
-    adc1 = ADC(0)
+    adc2 = ADC(0)
     # アナログ未利用
-    adc0 = ADC(1)
+    adc1 = ADC(1)
     # スピーカー
     out0 = PWM(Pin(2, Pin.OUT))
     # Pin.IN
     inp0 = Pin(3, Pin.IN, Pin.PULL_UP)	# スイッチ
     inp1 = Pin(7, Pin.IN, Pin.PULL_UP)	# スイッチ
     # 
-    np = NeoPixel(Pin(21, Pin.OUT), 4)	# GPIO 21 番に NeoPixel が4個接続されている
+    out3 = NeoPixel(Pin(21, Pin.OUT), 4)	# GPIO 21 番に NeoPixel が4個接続されている
     # I2C
     i2c = I2C(0, scl=Pin(1), sda=Pin(0)) # I2C初期化
     oled = SSD1306_I2C(128, 64, i2c) #(幅, 高さ, I2Cオブジェクト)
@@ -88,45 +89,66 @@ else:
     print("This device is not supported.:", device_info.machine)
 
 
-# This would be periodically polling a hardware sensor.
+# 定期的にハードウェアのセンサ値を送信する
+'''
+this.gpio = [
+    0, 1, 2,
+    8,
+    12, 13, 14, 15, 16
+];
+以下は + 24
+const MbitMoreButtonStateIndex = {
+    P0: 0,
+    P1: 1,
+    P2: 2,
+    A: 3,
+    B: 4,
+    LOGO: 5
+};
+'''
 def send_sensor_value():
     # state_characteristic に write する
-    # gpio_data(32bit) light_level(8bit) temperature(8bit) sound_level(8bit)
+    # gpio_data(32bit, ボタン状態を含む) 明るさ(8bit) 温度(8bit) 音の大きさ(8bit)
     # ピンの値を読み取って、デジタル入力データ (32ビット)のビットフィールドに格納
+    btna = 1 if inp0.value() == 0 else 0    # 1 0 を反転
+    btnb = 1 if inp1.value() == 0 else 0
     gpio_data = (
-        (inp0.value() << 0) |
-        # (pin5.value() << 1) |
-        (inp1.value() << 2)
+        (btna << 3+24) |            # ボタンA
+        (btnb << 4+24) |            # ボタンB
+        (human_sensor() << 5+24)    # 人感センサ
     )
-    button_state = 0x00  # ボタンの状態 (24ビット)
-    # light_level = int(adc1.read_u16()/65535*100)  # 明るさ (8ビット)
-    light_level = int(lux())  # 明るさ (8ビット)
-    light_level = max(0, min(255, light_level))  # 0から255の範囲に制限
-    temperature = int(adc0.read_u16()/65535*100)  # 温度(0～255)
-    sound_level = 0  # 音レベル (8ビット)
-    buffer = struct.pack('<I3B', gpio_data, light_level, temperature, sound_level)
-    # TODO: 送信するデータを更新
+    light_level = lux()                         # 明るさ
+    light_level = max(0, min(255, int(light_level/500*255))) # 500luxを100% とする。0から255の範囲に制限
+    temperature, humidity = temp_humi()
+    temperature = max(0, min(255, int(temperature+128)))  # 0から255の範囲に制限
+    humidity = max(0, min(255, int(humidity/100*255)))  # 0から255の範囲に制限
+    buffer = struct.pack('<I3B', gpio_data, light_level, temperature, humidity)
     ble_conn.state_write(buffer)
-
-#
-def playtone(frequency, vol):
-    out0.freq(int(frequency))  # Hz
-    out0.duty_u16(int(vol*300))      #
-
 
 def rgb(r, g, b):
     return (g, r, b)
 
 # n番目のNeoPixcelを 赤、緑、青 0から255
 def pixcel(n, r, g, b):
-    np[n] = rgb(int(r/100*255), int(g/100*255),int(b/100*255))        # n番の NeoPixel を点灯
-    np.write()
+    out3[n] = rgb(int(r/100*255), int(g/100*255),int(b/100*255))        # n番の NeoPixel を点灯
+    out3.write()
 pixcel(0, 0, 0, 0)
 
-# 音
-def _playTone(f, v):
-    out0.freq(int(f))       	# Hz
-    out0.duty_u16(int(v * 65535 / 100))	#
+def pixcel_n(n, value):
+    v = value.split(',')
+    try:
+        pixcel(n, int(v[0]), int(v[1]), int(v[2]))
+    except:
+        print("Pixcel Error")
+        pixcel(n, 0, 0, 0)
+
+# f Hzで、音をならす。音量 v:0 音を止める
+def play_tone(f, v):
+    out0.freq(int(f))
+    out0.duty_u16(int(v * 32768 / 100))
+
+def stop_tone():
+    play_tone(50, 0)
 
 MbitMoreDataFormat = {
     "CONFIG": 0x10,     # not used at this version
@@ -215,30 +237,46 @@ def handle_button_event(pin, button_name):
 inp0.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: handle_button_event(pin, 'A'))
 inp1.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: handle_button_event(pin, 'B'))
 
+# 人感センサ am312 の値を読み取る
+prevalue = 0
+def human_sensor():
+    global prevalue
+    if adc0:
+        val = adc0.value()
+        if prevalue != val:
+            print(val, end="__")
+            prevalue = val
+        if val != 0:
+            return 1
+    return 0
 
 # 明るさ
 def lux():
-    val = adc1.read_u16()/ 65535 * 3.6 * 20/9/10000 * ( 10 ** 6)
+    val = adc2.read_u16()/ 65535 * 3.6 * 20/9/10000 * ( 10 ** 6)
     return val
 
-# センサーの値を表示
-def disp_sensor_value():
+# 温度と湿度
+def temp_humi():
     if aht20:
         temperature = aht20.temperature
         humidity = aht20.relative_humidity
     else:
         temperature = 0
         humidity = 0
+    return temperature, humidity
+
+# センサーの値を表示
+def disp_sensor_value():
+    temperature, humidity = temp_humi()
     temp ="temp:{:6.1f}".format(temperature)
     humi ="hum :{:6.1f}".format(humidity)
     lx   ="lx:  {:6.0f}".format(lux())
-    # 人感センサーから16ビットのデータを読み取る
-    hs_value = am312.read_u16() if am312 else 0
+    # 人感センサの値を読み取る
+    hs_value = human_sensor()
     hs = "Human:{:05d}".format(hs_value)
-    sound = adc0.read_u16()
+    sound = adc1.read_u16()
     sd = "A1   :{:05d}".format(sound)
     #print(sound)
-    #print(am312.read_u16())
     # 上10ドットをそのままにして、下の部分だけ書き直す
     if oled:
         oled.fill_rect(0, 10, oled.width, oled.height - 10, 0)
@@ -258,6 +296,14 @@ def show_text(s, t=0):
         oled.text(s, 0, 0)
         oled.show()
 
+def draw_icon(icon, x, y):
+    if oled:
+        oled.fill_rect(x, y, 8, 5, 0)
+        for dx, val in enumerate(icon):
+            if val:
+                oled.pixel(x + dx % 5, y + int(dx / 5), 1)
+        oled.show()
+
 # ピン pin をアナログ出力 n %にする (n:0-1024)
 # TODO: out1->pin19, out2->pin20にする
 def analog_out(pin, n):
@@ -270,22 +316,11 @@ def analog_out(pin, n):
         out2.duty_u16(int(65535 * n / 1024))
 
 # コマンドを実行
-def do_command(data):
-    # print(data)
-    # Base64 エンコード
-    #binary_data = ubinascii.b2a_base64(data).strip()
-    #print(binary_data)  # 出力: b'\x01Hello'
+async def do_command(data):
     # バイナリデータをリストに変換
     data_list = list(data)
     print(data_list)  # 出力: [1, 72, 101, 108, 108, 111]
-    # データを分割して表示
-    #command_id = data_list[0]
-    #command_message = data_list[1:]
-    #print("Command ID:", command_id)  # 出力: Command ID: 1
-    #print("Command Message:", command_message)  # 出力: Command Message: [72, 101, 108, 108, 111]
     command_id = data_list[0]
-    # print(command_id)
-    # command_message = data[1:]
     if command_id == 65:
         # 文字 s を t ミリ秒間隔で流す
         show_text(data[2:].decode('utf-8'), data[1])
@@ -295,17 +330,47 @@ def do_command(data):
         uint16_value = struct.unpack('<H', data[2:4])[0]     # 続く2バイトを数値に変換
         # print("ピン", pin, "をアナログ出力", uint16_value, "%にする")
         analog_out(pin, uint16_value)
+    elif command_id == 96:
+        # 音を消す
+        stop_tone()
     elif command_id == 97:
         # 1000000/data[1:5] Hzの音を data[5]/255*100 %の大きさで鳴らす
+        # vol は 0 か、それ以外で音量を調節できない
         four_bytes = data[1:5]  # data[2:] から4バイトを取得
         uint32_value = struct.unpack('<I', four_bytes)[0]   # 4バイトを uint32 の数値に変換
-        playtone(1000000 / uint32_value, data[5]/255*100)
-    elif command_id == 3:
-        print("Command ID 3: Thank you")
-    elif command_id == 4:
-        print("Command ID 4: Sorry")
+        play_tone(1000000 / uint32_value, data[5]/255*100)
+    elif command_id == 130:
+        label = data[1:9].decode('utf-8')
+        value = data[9:].decode('utf-8')
+        print("label:", label, value)
+        # NeoPixcelを光らせる
+        if label=='pixcel-0':
+            pixcel_n(0, value)
+        elif label=='pixcel-1':
+            pixcel_n(1, value)
+        elif label=='pixcel-2':
+            pixcel_n(2, value)
+    elif command_id == 66:
+        # アイコン表示（上5x3）
+        draw_icon(data[1:], 0, 0)
+    elif command_id == 67:
+        # アイコン表示（下5x2）
+        draw_icon(data[1:], 0, 3)   # 下の部分だけ書き直す
     else:
         print("Command ID", command_id, "is not defined.")
+    return True
+
+'''
+[66, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 255, 0, 0, 0, 255]
+[67, 0, 255, 0, 255, 0, 0, 0, 255, 0, 0]
+
+[66, 255, 255, 0, 255, 0, 255, 0, 255, 0, 255, 255, 0, 0, 0, 255]
+[67, 0, 255, 0, 255, 0, 0, 0, 255, 0, 255]
+
+
+[130, 65, 66, 67, 68, 0, 0, 0, 0, 97, 98, 99, 100, 101, 102]
+ABCD   abcdef
+'''
 
 # センサーの値を定期的に送信
 async def sensor_task():
@@ -355,34 +420,3 @@ async def main():
             await asyncio.sleep(1)
 
 asyncio.run(main())
-
-# 不要なコード
-def cb03bbbbbb( pin ):
-    # send_sensor_value() # BLE
-    # print(str(pin))
-    if pin.value()==0:
-        if str(pin) == BTNA:    # Button A
-            # print("on_press_a")
-            # on_press_a()
-            # print("on_press_a done")
-            _playTone(392, 50)	# G 392
-            pixcel(0, 100, 0, 0)
-            pixcel(1, 0, 100, 0)
-            pixcel(2, 0, 0, 100)
-        elif str(pin) == BTNB:  # Button B
-            # on_press_b()
-            _playTone(329, 50)	# G 392
-            pixcel(2, 100, 0, 0)
-            pixcel(0, 0, 100, 0)
-            pixcel(1, 0, 0, 100)
-        else:
-            _playTone(440, 50)	# G 392
-            pixcel(1, 100, 0, 0)
-            pixcel(2, 0, 100, 0)
-            pixcel(0, 0, 0, 100)
-    else:
-        # on_release_a()
-        _playTone(440, 0)
-        pixcel(0, 0, 0, 0)
-        pixcel(1, 0, 0, 0)
-        pixcel(2, 0, 0, 0)

@@ -163,7 +163,7 @@ class BLEConnection:
             # コマンドを待つ
             await self.command_characteristic.written()
             data = self.command_characteristic.read()
-            do_command(data)    # コマンドを実行
+            await do_command(data)    # コマンドを実行
 
 
     async def ble_task(self, do_command):
