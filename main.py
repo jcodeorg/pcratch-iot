@@ -1,7 +1,6 @@
-# ESP32C6 BLE pcratch-IoT(micro:bit) v1.1.0
+# ESP32C6 BLE pcratch-IoT(micro:bit) v1.1.1
 import network
 import os
-import sys
 import struct
 import asyncio
 import time
@@ -15,19 +14,8 @@ from ble_conn import BLEConnection
 ble_conn = BLEConnection()
 
 # デバイス情報を取得
-def get_device_info():
-    info = os.uname()
-    return {
-        "sysname": info.sysname,
-        "nodename": info.nodename,
-        "release": info.release,
-        "version": info.version,
-        "machine": info.machine
-    }
-
-device_info = get_device_info()
-if 'ESP32C6' in device_info['machine']:
-    print("Welcome to ESP32C6")
+device_info = os.uname()
+if 'ESP32C6' in device_info.machine:
     # ESP32C6 Pin layout
     # GPIO0 :A0 :       5V
     # GPIO1 :A1 :       GND
@@ -36,33 +24,26 @@ if 'ESP32C6' in device_info['machine']:
     # GPIO22:SDA:       GPIO20:   :
     # GPIO23:SDL:       GPIO19:   :
     # GPIO16:TX :       GPIO17:RX :
-    # 人感センサ
-    am312 = ADC(Pin(0, Pin.IN))
-    am312.atten(ADC.ATTN_6DB)    # 6dBの入力減衰率を設定
-    # am312.width(ADC.WIDTH_12BIT)   # 12ビットの戻り値を設定(戻り値の範囲 0-4095)
-    # アナログ未利用
-    adc0 = ADC(Pin(1, Pin.IN))
-    #adc0.atten(ADC.ATTN_6DB)
-    #adc0.width(ADC.WIDTH_12BIT)   # 12ビットの戻り値を設定(戻り値の範囲 0-4095)
-    # 明るさ
-    adc1 = ADC(Pin(2, Pin.IN))
-    adc1.atten(ADC.ATTN_11DB)    # 11dBの入力減衰率を設定(電圧範囲はおよそ 0.0v - 3.6v)
-    adc1.width(ADC.WIDTH_12BIT)   # 12ビットの戻り値を設定(戻り値の範囲 0-4095)
-    # スピーカー
-    p00 = PWM(Pin(21, Pin.OUT), freq=440, duty=0)	# P00=スピーカー
-    p01 = PWM(Pin(19, Pin.OUT), freq=440, duty=0)	# P01
-    p02 = PWM(Pin(20, Pin.OUT), freq=440, duty=0)	# P02
+    print("Welcome to ESP32C6")
+    # ADC
+    am312 = ADC(Pin(0, Pin.IN)) # ADC0:人感センサ
+    am312.atten(ADC.ATTN_6DB)   # 6dBの入力減衰率を設定
+    adc0 = ADC(Pin(1, Pin.IN))  # ADC1:未使用
+    adc1 = ADC(Pin(2, Pin.IN))  # ADC2:明るさ
+    adc1.atten(ADC.ATTN_11DB)   # 11dBの入力減衰率を設定(電圧範囲はおよそ 0.0v - 3.6v)
+    adc1.width(ADC.WIDTH_12BIT) # 12ビットの戻り値を設定(戻り値の範囲 0-4095)
+    # Pin.OUT
+    out0 = PWM(Pin(21, Pin.OUT), freq=440, duty=0)	# out0:スピーカー
+    out1 = PWM(Pin(19, Pin.OUT), freq=440, duty=0)	# out1
+    out2 = PWM(Pin(20, Pin.OUT), freq=440, duty=0)	# out2
+    np = NeoPixel(Pin(16, Pin.OUT), 4)          	# out3:NeoPixel が4個接続されている
     # Pin.IN
-    BTNA = 'Pin(17)'
-    BTNB = 'Pin(18)'
-    PIN7NAME = 'Pin(21)'
-    button_a = Pin(17, Pin.IN, Pin.PULL_UP)	# スイッチ
-    # pin5 = Pin(21, Pin.IN, Pin.PULL_UP)	# スイッチ
-    button_b = Pin(18, Pin.IN, Pin.PULL_UP)	# スイッチ
-    # 
-    np = NeoPixel(Pin(16, Pin.OUT), 4)	# GPIO 21 番に NeoPixel が4個接続されている
+    inp0 = Pin(17, Pin.IN, Pin.PULL_UP)	# ボタンA
+    inp1 = Pin(18, Pin.IN, Pin.PULL_UP)	# ボタンB
     # I2C
-    i2c = I2C(0, scl=Pin(23), sda=Pin(22)) # I2C初期化
+    i2c = I2C(0, scl=Pin(23), sda=Pin(22))  # I2C初期化
+    oled = None # oled ディスプレイ
+    aht20 = None # AHT20 温湿度センサ
     try:
         oled = SSD1306_I2C(128, 64, i2c)  #(幅, 高さ, I2Cオブジェクト)
         # 画面をさかさまにするコマンドを送信
@@ -71,12 +52,12 @@ if 'ESP32C6' in device_info['machine']:
             oled.write_cmd(0xC0)  # COM出力スキャン方向
     except Exception as e:
         print(f"Error initializing oled: {e}")
-        oled = None  # oledをNoneに設定してプログラムが続行できるようにする
+    try:
+        aht20 = AHT20(i2c)        # AHT20 センサー
+    except Exception as e:
+        print(f"Error initializing aht20: {e}")
 
-    # AHT20 センサー
-    aht21 = AHT20(i2c)
-
-elif 'Raspberry Pi Pico W with RP2040' in device_info['machine']:
+elif 'Raspberry Pi Pico W with RP2040' in device_info.machine:
     # 人感センサ
     am312 = None
 
@@ -86,20 +67,16 @@ elif 'Raspberry Pi Pico W with RP2040' in device_info['machine']:
     # アナログ未利用
     adc0 = ADC(1)
     # スピーカー
-    p00 = PWM(Pin(2, Pin.OUT))
+    out0 = PWM(Pin(2, Pin.OUT))
     # Pin.IN
-    BTNA = 'Pin(GPIO3, mode=IN, pull=PULL_UP)'
-    BTNB = 'Pin(GPIO5, mode=IN, pull=PULL_UP)'
-    PIN7NAME = 'Pin(GPIO7, mode=IN, pull=PULL_UP)'
-    button_a = Pin(3, Pin.IN, Pin.PULL_UP)	# スイッチ
-    #pin5 = Pin(5, Pin.IN, Pin.PULL_UP)	# スイッチ
-    button_b = Pin(7, Pin.IN, Pin.PULL_UP)	# スイッチ
+    inp0 = Pin(3, Pin.IN, Pin.PULL_UP)	# スイッチ
+    inp1 = Pin(7, Pin.IN, Pin.PULL_UP)	# スイッチ
     # 
     np = NeoPixel(Pin(21, Pin.OUT), 4)	# GPIO 21 番に NeoPixel が4個接続されている
     # I2C
     i2c = I2C(0, scl=Pin(1), sda=Pin(0)) # I2C初期化
     oled = SSD1306_I2C(128, 64, i2c) #(幅, 高さ, I2Cオブジェクト)
-    aht21 = AHT20(i2c)
+    aht20 = AHT20(i2c)
 
     # VSYS電源電圧を取得する
     def getVsys():
@@ -108,7 +85,7 @@ elif 'Raspberry Pi Pico W with RP2040' in device_info['machine']:
         return volt
 
 else:
-    print("This device is not supported.:", device_info['machine'])
+    print("This device is not supported.:", device_info.machine)
 
 
 # This would be periodically polling a hardware sensor.
@@ -117,9 +94,9 @@ def send_sensor_value():
     # gpio_data(32bit) light_level(8bit) temperature(8bit) sound_level(8bit)
     # ピンの値を読み取って、デジタル入力データ (32ビット)のビットフィールドに格納
     gpio_data = (
-        (button_a.value() << 0) |
+        (inp0.value() << 0) |
         # (pin5.value() << 1) |
-        (button_b.value() << 2)
+        (inp1.value() << 2)
     )
     button_state = 0x00  # ボタンの状態 (24ビット)
     # light_level = int(adc1.read_u16()/65535*100)  # 明るさ (8ビット)
@@ -133,8 +110,8 @@ def send_sensor_value():
 
 #
 def playtone(frequency, vol):
-    p00.freq(int(frequency))  # Hz
-    p00.duty_u16(int(vol*300))      #
+    out0.freq(int(frequency))  # Hz
+    out0.duty_u16(int(vol*300))      #
 
 
 def rgb(r, g, b):
@@ -148,8 +125,8 @@ pixcel(0, 0, 0, 0)
 
 # 音
 def _playTone(f, v):
-    p00.freq(int(f))       	# Hz
-    p00.duty_u16(int(v * 65535 / 100))	#
+    out0.freq(int(f))       	# Hz
+    out0.duty_u16(int(v * 65535 / 100))	#
 
 MbitMoreDataFormat = {
     "CONFIG": 0x10,     # not used at this version
@@ -183,36 +160,6 @@ MbitMoreButtonEventID = {
 # キーと値を入れ替えた辞書を定義
 MbitMoreButtonEventName = {v: k for k, v in MbitMoreButtonEventID.items()}
 
-
-def cb03( pin ):
-    # send_sensor_value() # BLE
-    # print(str(pin))
-    if pin.value()==0:
-        if str(pin) == BTNA:    # Button A
-            # print("on_press_a")
-            # on_press_a()
-            # print("on_press_a done")
-            _playTone(392, 50)	# G 392
-            pixcel(0, 100, 0, 0)
-            pixcel(1, 0, 100, 0)
-            pixcel(2, 0, 0, 100)
-        elif str(pin) == BTNB:  # Button B
-            # on_press_b()
-            _playTone(329, 50)	# G 392
-            pixcel(2, 100, 0, 0)
-            pixcel(0, 0, 100, 0)
-            pixcel(1, 0, 0, 100)
-        else:
-            _playTone(440, 50)	# G 392
-            pixcel(1, 100, 0, 0)
-            pixcel(2, 0, 100, 0)
-            pixcel(0, 0, 0, 100)
-    else:
-        # on_release_a()
-        _playTone(440, 0)
-        pixcel(0, 0, 0, 0)
-        pixcel(1, 0, 0, 0)
-        pixcel(2, 0, 0, 0)
 
 # 0: actionEventType=MbitMoreActionEvent.BUTTON
 # 1-2: const buttonName = MbitMoreButtonID[dataView.getUint16(1, true)];
@@ -265,8 +212,8 @@ def handle_button_event(pin, button_name):
 
 
 # IRQハンドラとして登録
-button_a.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: handle_button_event(pin, 'A'))
-button_b.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: handle_button_event(pin, 'B'))
+inp0.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: handle_button_event(pin, 'A'))
+inp1.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: handle_button_event(pin, 'B'))
 
 
 # 明るさ
@@ -274,24 +221,27 @@ def lux():
     val = adc1.read_u16()/ 65535 * 3.6 * 20/9/10000 * ( 10 ** 6)
     return val
 
-
 # センサーの値を表示
 def disp_sensor_value():
-        temperature = aht21.temperature
-        humidity = aht21.relative_humidity
-        temp ="temp:{:6.1f}".format(temperature)
-        humi ="hum :{:6.1f}".format(humidity)
-        lx   ="lx:  {:6.0f}".format(lux())
-        # 人感センサーから16ビットのデータを読み取る
-        hs_value = am312.read_u16() if am312 else 0
-        hs = "Human:{:05d}".format(hs_value)
-        sound = adc0.read_u16()
-        sd = "A1   :{:05d}".format(sound)
-        #print(sound)
-        #print(am312.read_u16())
-        # 上10ドットをそのままにして、下の部分だけ書き直す
+    if aht20:
+        temperature = aht20.temperature
+        humidity = aht20.relative_humidity
+    else:
+        temperature = 0
+        humidity = 0
+    temp ="temp:{:6.1f}".format(temperature)
+    humi ="hum :{:6.1f}".format(humidity)
+    lx   ="lx:  {:6.0f}".format(lux())
+    # 人感センサーから16ビットのデータを読み取る
+    hs_value = am312.read_u16() if am312 else 0
+    hs = "Human:{:05d}".format(hs_value)
+    sound = adc0.read_u16()
+    sd = "A1   :{:05d}".format(sound)
+    #print(sound)
+    #print(am312.read_u16())
+    # 上10ドットをそのままにして、下の部分だけ書き直す
+    if oled:
         oled.fill_rect(0, 10, oled.width, oled.height - 10, 0)
-        # oled.text(ble_conn.NAME[-16:], 0, 0)
         oled.text(temp, 0, 8*2)
         oled.text(humi, 0, 8*3)
         oled.text(lx, 0, 8*4)
@@ -299,24 +249,25 @@ def disp_sensor_value():
         oled.text(sd, 0, 8*6)
         oled.show()
 
-# 文字 s を t ミリ秒間隔で流す
-def scroll(s, t):
+# 上10ドットに、文字 s を t ミリ秒間隔で流す
+def show_text(s, t=0):
     print(f"文字 {s} を {t} ミリ秒間隔で流す")
     # 上10ドットを消去
-    oled.fill_rect(0, 0, oled.width, 10, 0)
-    oled.text(s, 0, 0)
-    oled.show()
+    if oled:
+        oled.fill_rect(0, 0, oled.width, 10, 0)
+        oled.text(s, 0, 0)
+        oled.show()
 
 # ピン pin をアナログ出力 n %にする (n:0-1024)
-# TODO: pin1->pin19, pin2->pin20にする
+# TODO: out1->pin19, out2->pin20にする
 def analog_out(pin, n):
     # print(f"ピン {pin} をアナログ出力 {n} %にする")
     if pin == 0 or pin == 21:
-        p00.duty_u16(int(65535 * n / 1024))
+        out0.duty_u16(int(65535 * n / 1024))
     elif pin == 1 or pin == 19:
-        p01.duty_u16(int(65535 * n / 1024))
+        out1.duty_u16(int(65535 * n / 1024))
     elif pin == 2 or pin == 20:
-        p02.duty_u16(int(65535 * n / 1024))
+        out2.duty_u16(int(65535 * n / 1024))
 
 # コマンドを実行
 def do_command(data):
@@ -337,7 +288,7 @@ def do_command(data):
     # command_message = data[1:]
     if command_id == 65:
         # 文字 s を t ミリ秒間隔で流す
-        scroll(data[2:].decode('utf-8'), data[1])
+        show_text(data[2:].decode('utf-8'), data[1])
     elif command_id == 34:
         # ピン pin をアナログ出力 n %にする
         pin = data[1]
@@ -366,6 +317,7 @@ from time_weather import TimeWeather
 
 async def main():
     t1 = asyncio.create_task(ble_conn.ble_task(do_command))
+    show_text(ble_conn.NAME[-16:])
     disp_sensor_value()
     t3 = asyncio.create_task(sensor_task())
     # WiFiに接続
@@ -379,7 +331,7 @@ async def main():
         await asyncio.sleep(1)
     print('WiFi connected:', wlan.ifconfig())
 
-    clock = TimeWeather(oled, aht21)
+    clock = TimeWeather(oled, aht20)
     # await clock.connect_wifi(SSID, PASSWORD)
     # 現在時刻を取得
     await clock.get_ntptime()
@@ -403,3 +355,34 @@ async def main():
             await asyncio.sleep(1)
 
 asyncio.run(main())
+
+# 不要なコード
+def cb03bbbbbb( pin ):
+    # send_sensor_value() # BLE
+    # print(str(pin))
+    if pin.value()==0:
+        if str(pin) == BTNA:    # Button A
+            # print("on_press_a")
+            # on_press_a()
+            # print("on_press_a done")
+            _playTone(392, 50)	# G 392
+            pixcel(0, 100, 0, 0)
+            pixcel(1, 0, 100, 0)
+            pixcel(2, 0, 0, 100)
+        elif str(pin) == BTNB:  # Button B
+            # on_press_b()
+            _playTone(329, 50)	# G 392
+            pixcel(2, 100, 0, 0)
+            pixcel(0, 0, 100, 0)
+            pixcel(1, 0, 0, 100)
+        else:
+            _playTone(440, 50)	# G 392
+            pixcel(1, 100, 0, 0)
+            pixcel(2, 0, 100, 0)
+            pixcel(0, 0, 0, 100)
+    else:
+        # on_release_a()
+        _playTone(440, 0)
+        pixcel(0, 0, 0, 0)
+        pixcel(1, 0, 0, 0)
+        pixcel(2, 0, 0, 0)
