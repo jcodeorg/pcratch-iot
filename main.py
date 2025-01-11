@@ -1,4 +1,4 @@
-# ESP32C6 BLE pcratch-IoT(micro:bit) v1.1.2
+# ESP32C6 BLE pcratch-IoT(micro:bit) v1.1.3
 import network
 import os
 import struct
@@ -38,15 +38,17 @@ if 'ESP32C6' in device_info.machine:
     out3 = NeoPixel(Pin(16, Pin.OUT), 4)          	# out3:NeoPixel が4個接続されている
     # Pin.IN
     inp0 = Pin(17, Pin.IN, Pin.PULL_UP)	# ボタンA
-    inp1 = Pin(18, Pin.IN, Pin.PULL_UP)	# ボタンB
+    inp1 = Pin(20, Pin.IN, Pin.PULL_UP)	# ボタンB
     # I2C
     i2c = I2C(0, scl=Pin(23), sda=Pin(22))  # I2C初期化
     # oled ディスプレイ
     oled = None
     try:
         oled = SSD1306_I2C(128, 64, i2c)  #(幅, 高さ, I2Cオブジェクト)
-        # 画面をさかさまにするコマンドを送信
         if True:
+            pass
+        else:
+            # 画面をさかさまにするコマンドを送信
             oled.write_cmd(0xA0)  # セグメントリマップ
             oled.write_cmd(0xC0)  # COM出力スキャン方向
     except Exception as e:
