@@ -1,17 +1,19 @@
-# ESP32C6 BLE pcratch-IoT(micro:bit) v1.1.3
+# ESP32C6 BLE pcratch-IoT(micro:bit) v1.1.4
 
 import asyncio
 import network
 from time_weather import TimeWeather
 from iotmanager import IoTManager
 
-SSID = 'AirMacPelWi-Fi222'
+# SSID = 'AirMacPelWi-Fi'
+SSID = 'kkkkkito'
 PASSWORD = '78787878'
 
 # main関数
 async def main():
     # インスタンスの作成と使用例
     iot_manager = IoTManager()
+    # iot_manager.device.flip_display()
     iot_manager.disp_sensor_value()
 
     wlan = network.WLAN(network.STA_IF)
