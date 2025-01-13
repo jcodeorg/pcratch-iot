@@ -1,14 +1,12 @@
 import asyncio
 import aioble
 import bluetooth
-
-import random
 import struct
-import ubinascii
 import network
 from micropython import const
 
 
+# マイクロビットのユニークIDからフレンドリー名を生成
 def microbit_friendly_name(unique_id):
     length = 5
     letters = 5
@@ -50,7 +48,8 @@ class BLEConnection:
         self.NAME = f"BBC micro:bit [{self.riendly_name}]"
         print(self.NAME)
         self.connection = None  # 接続オブジェクトを初期化
-
+        # 受信したコマンドの処理
+        self.recvnum = 0
         # サービスUUIDと characteristic UUID を定義
         self.IOT_SERVICE_UUID = bluetooth.UUID('0b50f3e4-607f-4151-9091-7d008d6ffc5c')
         IOT_COMMAND_CH__UUID = bluetooth.UUID('0b500100-607f-4151-9091-7d008d6ffc5c')
@@ -121,8 +120,7 @@ class BLEConnection:
     def state_write(self, buffer):
         self.state_characteristic.write(buffer, send_update=True)
 
-    # Serially wait for connections. Don't advertise while a central is
-    # connected.
+    # 接続を待ち、接続があれば3バイトのデータを送信
     async def peripheral_task(self):
         while True:
             try:
@@ -149,7 +147,8 @@ class BLEConnection:
                 print("Error during advertising or connection:", e)
                 await asyncio.sleep_ms(1000)
 
-
+    # 1秒ごとにmotion_characteristicにデータを送信
+    # TODO:本当に必要な処理だろうか？？？
     async def motion_task(self):
         while True:
             #print(i, "motion_characteristic")
@@ -158,17 +157,20 @@ class BLEConnection:
             self.motion_characteristic.write(data_to_send)
             await asyncio.sleep_ms(1000)
 
-    async def command_task(self, do_command):
+    # コマンドを待ち、実行する
+    async def command_task(self, callback):
+        self.recvnum = 0
         while True:
-            # コマンドを待つ
             await self.command_characteristic.written()
             data = self.command_characteristic.read()
-            await do_command(data)    # コマンドを実行
+            self.recvnum += 1
+            print(f"Received {self.recvnum} command: {data}")
+            await callback(data)    # コマンドを実行
 
-
-    async def ble_task(self, do_command):
+    # BLE接続を維持するために必要な 3つのタスクを同時に実行
+    async def ble_task(self, callback):
         # Run both tasks.
         t2 = asyncio.create_task(self.motion_task())
         t3 = asyncio.create_task(self.peripheral_task())
-        t4 = asyncio.create_task(self.command_task(do_command))
-        await asyncio.gather(t2, t3, t4)
+        t4 = asyncio.create_task(self.command_task(callback))
+        # await asyncio.gather(t2, t3, t4)

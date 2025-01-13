@@ -1,14 +1,11 @@
 # device for Pcratch IoT
-import network
 import os
 import struct
-import asyncio
 import time
 from machine import Pin, I2C, ADC, PWM
 from ssd1306 import SSD1306_I2C
 from neopixel import NeoPixel
 from ahtx0 import AHT20
-from ble_conn import BLEConnection
 
 # ボタン関連の定義
 MbitMoreDataFormat = {
@@ -43,8 +40,8 @@ MbitMoreButtonEventID = {
 MbitMoreButtonEventName = {v: k for k, v in MbitMoreButtonEventID.items()}
 
 class Device:
-    def __init__(self):
-        self.ble_conn = BLEConnection()
+    def __init__(self, ble_conn):
+        self.ble_conn = ble_conn # TODO: BLEConnectionを初期化する
         self.device_info = os.uname()
         self.init_device()
         self.button_state = {
@@ -119,17 +116,6 @@ class Device:
             self.aht20 = AHT20(self.i2c)
         except OSError as e:
             print(f"Error initializing aht20: {e}")
-
-    def button_notification(self, button_name, event_name):
-        buffer = bytearray(20)
-        buffer[19] = MbitMoreDataFormat["ACTION_EVENT"]
-        action = MbitMoreActionEvent["BUTTON"]
-        button = MbitMoreButtonName[button_name]
-        event = MbitMoreButtonEventName[event_name]
-        timestamp = time.ticks_ms()
-        packed_data = struct.pack('<BHBI', action, button, event, timestamp)
-        buffer[0:8] = packed_data
-        self.ble_conn.send_notification(buffer)
 
     def handle_button_event(self, pin, button_name):
         if pin.value() == 0:  # ボタンが押された
@@ -271,6 +257,17 @@ class Device:
         Pin(29, Pin.IN)
         volt = ADC(3).read_u16() / 65535 * 3.3 * 3
         return volt
+
+    def button_notification(self, button_name, event_name):
+        buffer = bytearray(20)
+        buffer[19] = MbitMoreDataFormat["ACTION_EVENT"]
+        action = MbitMoreActionEvent["BUTTON"]
+        button = MbitMoreButtonName[button_name]
+        event = MbitMoreButtonEventName[event_name]
+        timestamp = time.ticks_ms()
+        packed_data = struct.pack('<BHBI', action, button, event, timestamp)
+        buffer[0:8] = packed_data
+        self.ble_conn.send_notification(buffer)
 
     # 定期的にハードウェアのセンサ値を送信する
     '''
