@@ -1,16 +1,9 @@
-# Time and Weather
+# ESP32C6 pcratch-IoT(micro:bit) v1.1.5
+# ネットワーク天気予報
 
-import network
-import ntptime
-import time
-from machine import Pin, I2C
-from ssd1306 import SSD1306_I2C
-from ahtx0 import AHT20
 # from misakifont import MisakiFont
-import framebuf
 import urequests
 import json
-import asyncio
 
 # アイコンの定義
 weather_icons = {
@@ -70,7 +63,7 @@ weather_icons = {
     ]
 }
 
-class TimeWeather:
+class Weather:
     def __init__(self, oled):
         self.oled = oled
         self.font = None
