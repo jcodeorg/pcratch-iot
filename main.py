@@ -2,7 +2,7 @@
 
 import asyncio
 import network
-from time_weather import TimeWeather
+from weather import TimeWeather
 from iotclock import Clock
 from iotmanager import IoTManager
 import gc
