@@ -1,7 +1,7 @@
 # Description: IoTデバイスの管理クラス
 import asyncio
 from ble_conn import BLEConnection
-from device import Device
+from iotdevice import Device
 
 # グラフを描く
 def draw_graph(oled, x, y, width, height, data, min_value, max_value):
