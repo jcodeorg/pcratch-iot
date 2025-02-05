@@ -30,11 +30,11 @@ class IoTManager:
         self.ble_conn = BLEConnection()
         self.device = Device(self.ble_conn)
         self.connected_displayed = False
-        self.demonum = 0
         self.brightness = 255
         self.temp_data = []
         self.humi_data = []
         self.max_data_points = 60
+        self.colors = []
         self.music = []
 
         asyncio.create_task(self.ble_conn.ble_task(self.device.do_command)) # callback を登録
@@ -67,6 +67,7 @@ class IoTManager:
         if device.human_sensor():   # 人感センサーが反応したら
             self.brightness = 255   # NeoPixelを点灯
             self.music = [261, 329, 392, 523, 0] # ドミソド
+            self.colors = [(100, 0, 0), (100, 0, 0), (0, 100, 0), (0, 100, 0), (0, 0, 100), (0, 0, 100), (100, 100, 0), (100, 100, 0), (0, 0, 0)]
 
         # OLEDディスプレイに表示
         if device.oled:
@@ -82,15 +83,12 @@ class IoTManager:
     # NeoPixelをデモ表示
     def demo_neopixcel(self):
         device = self.device
-        self.demonum += 1
-        colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0), (0, 255, 255)]
-        color = colors[self.demonum % len(colors)]
-        # 明るさを調整
-        adjusted_color = (color[0] * self.brightness // 255, color[1] * self.brightness // 255, color[2] * self.brightness // 255)
-        device.pixcel(0, adjusted_color[0], adjusted_color[1], adjusted_color[2])
-        device.pixcel(1, adjusted_color[0], adjusted_color[1], adjusted_color[2])
-        device.pixcel(2, adjusted_color[0], adjusted_color[1], adjusted_color[2])
-        self.brightness = max(0, self.brightness - 20)  # 25ずつ減少させる（0未満にはならないようにする）
+        if self.colors:
+            color = self.colors.pop(0)
+            device.pixcel(0, color[0], color[1], color[2])
+            device.pixcel(1, color[0], color[1], color[2])
+            device.pixcel(2, color[0], color[1], color[2])
+            device.pixcel(3, color[0], color[1], color[2])
         # self.music
         if self.music:
             frequency = self.music.pop(0)  # 配列の先頭から周波数を取り出す
