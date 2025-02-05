@@ -4,14 +4,13 @@ import asyncio
 import network
 from weather import Weather
 from iotclock import Clock
-# from iotmanager import IoTManager
 import gc
 from ble_conn import BLEConnection
 from iotdevice import Device
 
 SSID = 'AirMacPelWi-Fi'
 # SSID = 'kkkkkito'
-PASSWORD = '78787878'
+PASSWORD = 'password'
 
 
 # グラフを描く
@@ -25,6 +24,7 @@ def draw_graph(oled, x, y, width, height, data, min_value, max_value):
         if x0 < x + width:  # 画面の幅を超えないようにする
             oled.pixel(x0, y0, 1)
 
+# デバイスとBLE接続を管理するクラス
 class IoTManager:
     def __init__(self):
         self.ble_conn = BLEConnection()
@@ -35,16 +35,20 @@ class IoTManager:
         self.temp_data = []
         self.humi_data = []
         self.max_data_points = 60
+        self.music = []
 
-        asyncio.create_task(self.ble_conn.ble_task(self.device.do_command))
+        asyncio.create_task(self.ble_conn.ble_task(self.device.do_command)) # callback を登録
         asyncio.create_task(self.sensor_task())
 
+    # グラフ用のデータを追加
     def add_data(self, data_list, value):
         data_list.append(value)
         if len(data_list) > self.max_data_points:
             data_list.pop(0)
 
+    # センサーの値をOLEDに表示
     def disp_sensor_value(self):
+        print("disp_sensor_value")
         device = self.device
         if self.ble_conn.connection:
             if not self.connected_displayed:
@@ -54,13 +58,15 @@ class IoTManager:
             device.show_text(self.ble_conn.NAME[-16:])
             self.connected_displayed = False
 
-        # データをリストに追加し、長さを制限
+        # グラフ用データをリストに追加し、長さを制限
         temperature, humidity = self.device.temp_humi()
         self.add_data(self.temp_data, temperature)
         self.add_data(self.humi_data, humidity)
 
+        # 人感センサーが反応したら、NeoPixelを点灯
         if device.human_sensor():   # 人感センサーが反応したら
             self.brightness = 255   # NeoPixelを点灯
+            self.music = [261, 329, 392, 523, 0] # ドミソド
 
         # OLEDディスプレイに表示
         if device.oled:
@@ -73,6 +79,7 @@ class IoTManager:
             device.oled.text("H{:5d}".format(device.human_sensor()), 72, 40)
             device.oled.show()
 
+    # NeoPixelをデモ表示
     def demo_neopixcel(self):
         device = self.device
         self.demonum += 1
@@ -84,41 +91,48 @@ class IoTManager:
         device.pixcel(1, adjusted_color[0], adjusted_color[1], adjusted_color[2])
         device.pixcel(2, adjusted_color[0], adjusted_color[1], adjusted_color[2])
         self.brightness = max(0, self.brightness - 20)  # 25ずつ減少させる（0未満にはならないようにする）
+        # self.music
+        if self.music:
+            frequency = self.music.pop(0)  # 配列の先頭から周波数を取り出す
+            if frequency > 0:
+                device.play_tone(frequency, 100)  # 周波数が0より大きい場合に音を再生
+            else:
+                device.stop_tone()
 
-    # センサーの値を定期的に送信
+    # センサーの値を 250ms 毎に送信
+    # さらに Demo表示を実行
+    # さらに 音を鳴らす
     async def sensor_task(self):
         device = self.device
-        neopixcel = False
+        demoflag = False
         while True:
-            if device.ble_conn.connection:
-                if neopixcel:
+            if device.ble_conn.connection:  # BLE接続がある場合
+                if demoflag:
                     device.pixcel(0, 0,0,0)
                     device.pixcel(1, 0,0,0)
                     device.pixcel(2, 0,0,0)
-                    neopixcel = False
+                    demoflag = False
                 device.send_sensor_value()
-            else:
+            else:                           # BLE接続がない場合
                 self.demo_neopixcel()
-                neopixcel = True
+                demoflag = True
             await asyncio.sleep_ms(250)
 
-# メインループで実行する関数
-async def mainloop(iot_manager):
-    iot_manager.disp_sensor_value()
 
 # main関数
 async def main():
     # インスタンスの作成と使用例
     iot_manager = IoTManager()
     # iot_manager.device.flip_display()
-    mainloop(iot_manager)
+    iot_manager.disp_sensor_value()
 
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
     try:
         wlan.connect(SSID, PASSWORD)
         while not wlan.isconnected():
-            mainloop(iot_manager)
+            print('WiFi connecting...')
+            iot_manager.disp_sensor_value()
             await asyncio.sleep(1)
         print('WiFi connected:', wlan.ifconfig())
 
@@ -137,13 +151,13 @@ async def main():
             print_memory_usage()
             await asyncio.sleep(10)
             for _ in range(10):
-                mainloop(iot_manager)
+                iot_manager.disp_sensor_value()
                 await asyncio.sleep(1)
     except OSError as e:
         print(f"Failed to connect to WiFi: {e}")
 
     while True:
-        mainloop(iot_manager)
+        iot_manager.disp_sensor_value()
         await asyncio.sleep(1)
 
 # メモリ使用量を表示

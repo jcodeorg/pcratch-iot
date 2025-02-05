@@ -1,4 +1,4 @@
-# device for Pcratch IoT
+# ESP32C6 pcratch-IoT(micro:bit) v1.1.5
 import os
 import struct
 import time
