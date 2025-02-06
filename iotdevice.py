@@ -1,4 +1,4 @@
-# ESP32C6 pcratch-IoT(micro:bit) v1.1.5
+# ESP32C6 pcratch-IoT(micro:bit) v1.2.0
 import os
 import struct
 import time
@@ -67,25 +67,26 @@ class Device:
         # GPIO23:SDL:       GPIO19:   :
         # GPIO16:TX :       GPIO17:RX :
         print("Welcome to ESP32C6")
-        self.adc0 = Pin(0, Pin.IN, Pin.PULL_DOWN)
+        self.adc0 = ADC(Pin(0, Pin.IN))
         self.adc1 = ADC(Pin(1, Pin.IN))
         self.adc2 = ADC(Pin(2, Pin.IN))
         self.adc2.atten(ADC.ATTN_11DB)
         self.adc2.width(ADC.WIDTH_12BIT)
         self.out0 = PWM(Pin(21, Pin.OUT), freq=50, duty=0)
+        self.i2c = I2C(0, scl=Pin(23), sda=Pin(22))
+        self.out3 = NeoPixel(Pin(16, Pin.OUT), 4)
         self.out1 = PWM(Pin(19, Pin.OUT), freq=50, duty=0)
         self.out2 = PWM(Pin(20, Pin.OUT), freq=50, duty=0)
-        self.out3 = NeoPixel(Pin(16, Pin.OUT), 4)
         self.inp0 = Pin(17, Pin.IN, Pin.PULL_UP)
         self.inp1 = Pin(20, Pin.IN, Pin.PULL_UP)
-        self.i2c = I2C(0, scl=Pin(23), sda=Pin(22))
+        self.p18 = Pin(18, Pin.IN, Pin.PULL_DOWN)
         self.init_oled()
         self.init_aht20()
         self.init_pixcel()
         self.register_button_irq()
 
     def init_pico_w(self):
-        self.adc0 = None
+        self.p18 = None
         self.adc2 = ADC(0)
         self.adc1 = ADC(1)
         self.out0 = PWM(Pin(2, Pin.OUT))
@@ -117,6 +118,10 @@ class Device:
         except OSError as e:
             print(f"Error initializing aht20: {e}")
 
+    # ボタンの状態を取得
+    def get_button_state(self, button_name):
+        return self.button_state[button_name]
+    
     def handle_button_event(self, pin, button_name):
         if pin.value() == 0:  # ボタンが押された
             if not self.button_state[button_name]['pressed']:
@@ -215,8 +220,8 @@ class Device:
         self.play_tone(50, 0)
 
     def human_sensor(self):
-        if self.adc0:
-            val = self.adc0.value()
+        if self.p18:
+            val = self.p18.value()
             if val != 0:
                 return 1
         return 0

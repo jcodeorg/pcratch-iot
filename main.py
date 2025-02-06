@@ -1,4 +1,4 @@
-# ESP32C6 pcratch-IoT(micro:bit) v1.1.5
+# ESP32C6 pcratch-IoT(micro:bit) v1.2.0
 
 import asyncio
 import network
@@ -30,11 +30,13 @@ class IoTManager:
         self.ble_conn = BLEConnection()
         self.device = Device(self.ble_conn)
         self.connected_displayed = False
-        self.brightness = 255
         self.temp_data = []
         self.humi_data = []
         self.max_data_points = 60
         self.colors = []
+        self.colors1 = []
+        self.colors2 = []
+        self.colors3 = []
         self.music = []
 
         asyncio.create_task(self.ble_conn.ble_task(self.device.do_command)) # callback を登録
@@ -48,7 +50,7 @@ class IoTManager:
 
     # センサーの値をOLEDに表示
     def disp_sensor_value(self):
-        print("disp_sensor_value")
+        # print("disp_sensor_value")
         device = self.device
         if self.ble_conn.connection:
             if not self.connected_displayed:
@@ -63,11 +65,11 @@ class IoTManager:
         self.add_data(self.temp_data, temperature)
         self.add_data(self.humi_data, humidity)
 
-        # 人感センサーが反応したら、NeoPixelを点灯
-        if device.human_sensor():   # 人感センサーが反応したら
-            self.brightness = 255   # NeoPixelを点灯
+        # ボタンが押されたら、NeoPixelを点灯
+        if device.get_button_state('A')['pressed']:
+        # device.human_sensor():   # 人感センサーが反応したら
             self.music = [261, 329, 392, 523, 0] # ドミソド
-            self.colors = [(100, 0, 0), (100, 0, 0), (0, 100, 0), (0, 100, 0), (0, 0, 100), (0, 0, 100), (100, 100, 0), (100, 100, 0), (0, 0, 0)]
+            self.colors = [(100, 0, 0), (100, 0, 0), (100, 0, 0), (100, 0, 0), (0, 100, 0), (0, 100, 0), (0, 0, 100), (0, 0, 100), (100, 100, 0), (100, 100, 0), (0, 0, 0)]
 
         # OLEDディスプレイに表示
         if device.oled:
@@ -85,11 +87,25 @@ class IoTManager:
         device = self.device
         if self.colors:
             color = self.colors.pop(0)
+            if not self.colors1:
+                self.colors1.append(color)
+            self.colors1.append(color)
             device.pixcel(0, color[0], color[1], color[2])
+        if self.colors1:
+            color = self.colors1.pop(0)
+            if not self.colors2:
+                self.colors2.append(color)
+            self.colors2.append(color)
             device.pixcel(1, color[0], color[1], color[2])
+        if self.colors2:
+            color = self.colors2.pop(0)
+            if not self.colors3:
+                self.colors3.append(color)
+            self.colors3.append(color)
             device.pixcel(2, color[0], color[1], color[2])
+        if self.colors3:
+            color = self.colors3.pop(0)
             device.pixcel(3, color[0], color[1], color[2])
-        # self.music
         if self.music:
             frequency = self.music.pop(0)  # 配列の先頭から周波数を取り出す
             if frequency > 0:
