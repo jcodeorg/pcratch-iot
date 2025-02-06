@@ -1,4 +1,4 @@
-# ESP32C6 pcratch-IoT(micro:bit) v1.2.1
+# ESP32C6 pcratch-IoT(micro:bit) v1.2.2
 
 import asyncio
 import network

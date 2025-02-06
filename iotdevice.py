@@ -1,4 +1,4 @@
-# ESP32C6 pcratch-IoT(micro:bit) v1.2.0
+# ESP32C6 pcratch-IoT(micro:bit) v1.2.2
 import os
 import struct
 import time
@@ -67,7 +67,7 @@ class Device:
         # GPIO23:SDL:       GPIO19:   :
         # GPIO16:TX :       GPIO17:RX :
         print("Welcome to ESP32C6")
-        self.adc0 = ADC(Pin(0, Pin.IN))
+        self.adc0 = Pin(0, Pin.IN, Pin.PULL_DOWN)
         self.adc1 = ADC(Pin(1, Pin.IN))
         self.adc2 = ADC(Pin(2, Pin.IN))
         self.adc2.atten(ADC.ATTN_11DB)
@@ -79,14 +79,14 @@ class Device:
         self.out2 = PWM(Pin(20, Pin.OUT), freq=50, duty=0)
         self.inp0 = Pin(17, Pin.IN, Pin.PULL_UP)
         self.inp1 = Pin(20, Pin.IN, Pin.PULL_UP)
-        self.p18 = Pin(18, Pin.IN, Pin.PULL_DOWN)
+        # self.p18 = Pin(18, Pin.IN, Pin.PULL_DOWN)
         self.init_oled()
         self.init_aht20()
         self.init_pixcel()
         self.register_button_irq()
 
     def init_pico_w(self):
-        self.p18 = None
+        self.adc0 = None
         self.adc2 = ADC(0)
         self.adc1 = ADC(1)
         self.out0 = PWM(Pin(2, Pin.OUT))
@@ -220,8 +220,8 @@ class Device:
         self.play_tone(50, 0)
 
     def human_sensor(self):
-        if self.p18:
-            val = self.p18.value()
+        if self.adc0:
+            val = self.adc0.value()
             if val != 0:
                 return 1
         return 0
