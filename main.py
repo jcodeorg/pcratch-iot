@@ -145,7 +145,7 @@ async def main():
     try:
         wlan.connect(SSID, PASSWORD)
         while not wlan.isconnected():
-            print('WiFi connecting...')
+            # print('WiFi connecting...')
             iot_manager.disp_sensor_value()
             await asyncio.sleep(1)
         print('WiFi connected:', wlan.ifconfig())
