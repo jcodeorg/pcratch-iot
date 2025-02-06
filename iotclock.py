@@ -1,4 +1,4 @@
-# ESP32C6 pcratch-IoT(micro:bit) v1.1.5
+# ESP32C6 pcratch-IoT(micro:bit) v1.2.0
 # ネットワーク対応時計
 
 import ntptime
@@ -26,10 +26,11 @@ class Clock:
         formatted_time = "{:02}:{:02}:{:02}".format(current_time[3], current_time[4], current_time[5])
 
         # 上10ドットをそのままにして、下の部分だけ書き直す
-        self.oled.fill_rect(0, 10, self.oled.width, self.oled.height - 10, 0)
-        self.oled.text(formatted_date, 0, 10)
-        self.draw_text_double_size(formatted_time, 0, 30)
-        self.oled.show()
+        if self.oled:
+            self.oled.fill_rect(0, 10, self.oled.width, self.oled.height - 10, 0)
+            self.oled.text(formatted_date, 0, 10)
+            self.draw_text_double_size(formatted_time, 0, 30)
+            self.oled.show()
 
     def draw_text_double_size(self, text, x, y):
         temp_buf = bytearray(8 * 8 // 8)  # 8x8のビットマップ用バッファ

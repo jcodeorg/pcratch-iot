@@ -1,4 +1,4 @@
-# ESP32C6 pcratch-IoT(micro:bit) v1.2.0
+# ESP32C6 pcratch-IoT(micro:bit) v1.2.1
 
 import asyncio
 import network
@@ -65,12 +65,6 @@ class IoTManager:
         self.add_data(self.temp_data, temperature)
         self.add_data(self.humi_data, humidity)
 
-        # ボタンが押されたら、NeoPixelを点灯
-        if device.get_button_state('A')['pressed']:
-        # device.human_sensor():   # 人感センサーが反応したら
-            self.music = [261, 329, 392, 523, 0] # ドミソド
-            self.colors = [(100, 0, 0), (100, 0, 0), (100, 0, 0), (100, 0, 0), (0, 100, 0), (0, 100, 0), (0, 0, 100), (0, 0, 100), (100, 100, 0), (100, 100, 0), (0, 0, 0)]
-
         # OLEDディスプレイに表示
         if device.oled:
             device.oled.fill_rect(0, 10, device.oled.width, device.oled.height - 10, 0)
@@ -130,8 +124,14 @@ class IoTManager:
             else:                           # BLE接続がない場合
                 self.demo_neopixcel()
                 demoflag = True
+                # ボタンが押されたら、NeoPixelを点灯
+                if device.get_button_state('A')['pressed']:
+                # device.human_sensor():   # 人感センサーが反応したら
+                    if not self.music:
+                        self.music = [261, 329, 392, 523, 0] # ドミソド
+                    if not self.colors:
+                        self.colors = [(100, 0, 0), (100, 0, 0), (100, 0, 0), (100, 0, 0), (0, 100, 0), (0, 100, 0), (0, 0, 100), (0, 0, 100), (100, 100, 0), (100, 100, 0), (0, 0, 0)]
             await asyncio.sleep_ms(250)
-
 
 # main関数
 async def main():
