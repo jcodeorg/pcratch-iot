@@ -1,4 +1,5 @@
-# ESP32C6 pcratch-IoT(micro:bit) v1.1.5
+# ESP32C6 pcratch-IoT(micro:bit) v1.2.3
+import time
 import asyncio
 import aioble
 import bluetooth
@@ -71,7 +72,7 @@ class BLEConnection:
         # サービスと characteristic を定義
         self.iot_service = aioble.Service(self.IOT_SERVICE_UUID)
         self.command_characteristic = aioble.Characteristic(
-            self.iot_service, IOT_COMMAND_CH__UUID, read=True, write=True
+            self.iot_service, IOT_COMMAND_CH__UUID, read=True, write=True, notify=True
         )
         self.state_characteristic = aioble.Characteristic(
             self.iot_service, IOT_STATE_CH_UUID, read=True
@@ -140,7 +141,7 @@ class BLEConnection:
                     data_to_send = struct.pack('<BBB', hardware, protocol, route)
                     self.command_characteristic.write(data_to_send)
                     print("3バイト送信...") # 3バイトのデータを送信
-                    # 切断理由を取得して表示
+                    # 切断を待ち、理由を取得して表示
                     reason = await connection.disconnected(timeout_ms=None)
                     print(f"Disconnected. Reason: {reason}")
                     self.connection = None  # 接続オブジェクトを初期化
@@ -151,27 +152,21 @@ class BLEConnection:
     # 1秒ごとにmotion_characteristicにデータを送信
     # TODO:本当に必要な処理だろうか？？？
     async def motion_task(self):
-        while True:
-            #print(i, "motion_characteristic")
+        try:
             # 送信する2バイトのデータを9個定義（すべての値がゼロ）
             data_to_send = struct.pack('<9H', *([0] * 9))
             self.motion_characteristic.write(data_to_send)
             await asyncio.sleep_ms(1000)
+        except Exception as e:
+            print(f"Error in motion_task: {e}")
+            await asyncio.sleep_ms(1000)
 
     # コマンドを待ち、実行する
     async def command_task(self, callback):
-        self.recvnum = 0
         while True:
             await self.command_characteristic.written()
             data = self.command_characteristic.read()
             self.recvnum += 1
-            print(f"Received {self.recvnum} command: {data}")
-            await callback(data)    # コマンドを実行
-
-    # BLE接続を維持するために必要な 3つのタスクを同時に実行
-    async def ble_task(self, callback):
-        # Run both tasks.
-        t2 = asyncio.create_task(self.motion_task())
-        t3 = asyncio.create_task(self.peripheral_task())
-        t4 = asyncio.create_task(self.command_task(callback))
-        # await asyncio.gather(t2, t3, t4)
+            # print(f"Received {self.recvnum} command: {data}")
+            asyncio.create_task(callback(data))  # コマンドを実行
+            await asyncio.sleep(0)  # 他のタスクに制御を渡す

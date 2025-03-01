@@ -1,4 +1,4 @@
-# ESP32C6 pcratch-IoT(micro:bit) v1.2.2
+# ESP32C6 pcratch-IoT(micro:bit) v1.2.3
 
 import asyncio
 import network
@@ -39,8 +39,10 @@ class IoTManager:
         self.colors3 = []
         self.music = []
 
-        asyncio.create_task(self.ble_conn.ble_task(self.device.do_command)) # callback を登録
+        asyncio.create_task(self.ble_conn.motion_task())
+        asyncio.create_task(self.ble_conn.peripheral_task())
         asyncio.create_task(self.sensor_task())
+        asyncio.create_task(self.ble_conn.command_task(self.device.do_command))
 
     # グラフ用のデータを追加
     def add_data(self, data_list, value):

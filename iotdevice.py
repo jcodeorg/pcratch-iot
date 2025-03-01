@@ -1,4 +1,4 @@
-# ESP32C6 pcratch-IoT(micro:bit) v1.2.2
+# ESP32C6 pcratch-IoT(micro:bit) v1.2.3
 import os
 import struct
 import time
@@ -155,7 +155,7 @@ class Device:
     async def do_command(self, data):
         # バイナリデータをリストに変換
         data_list = list(data)
-        print(data_list)  # 出力: [1, 72, 101, 108, 108, 111]
+        # print(data_list)  # 出力: [1, 72, 101, 108, 108, 111]
         command_id = data_list[0]
         if command_id == 65:
             # 文字 s を t ミリ秒間隔で流す
