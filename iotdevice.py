@@ -1,4 +1,4 @@
-# ESP32C6 pcratch-IoT(micro:bit) v1.2.3
+# ESP32C6 pcratch-IoT(micro:bit) v1.2.4
 import os
 import struct
 import time
@@ -18,6 +18,12 @@ MbitMoreDataFormat = {
 MbitMoreActionEvent = {
   "BUTTON": 0x01,
   "GESTURE": 0x02
+}
+MbitMorePinEvent = {
+    "RISE": 2,
+    "FALL": 3,
+    "PULSE_HIGH": 4,
+    "PULSE_LOW": 5
 }
 MbitMoreButtonID = {
     1: 'A',
@@ -48,6 +54,7 @@ class Device:
             'A': {'pressed': False, 'press_time': 0, 'down_count': 0},
             'B': {'pressed': False, 'press_time': 0, 'down_count': 0}
         }
+        self.pin_event_time = {}
 
     def init_device(self):
         if 'ESP32C6' in self.device_info.machine:
@@ -72,14 +79,13 @@ class Device:
         self.adc2 = ADC(Pin(2, Pin.IN))
         self.adc2.atten(ADC.ATTN_11DB)
         self.adc2.width(ADC.WIDTH_12BIT)
-        self.out0 = PWM(Pin(21, Pin.OUT), freq=50, duty=0)
         self.i2c = I2C(0, scl=Pin(23), sda=Pin(22))
         self.out3 = NeoPixel(Pin(16, Pin.OUT), 4)
-        self.out1 = PWM(Pin(19, Pin.OUT), freq=50, duty=0)
-        self.out2 = PWM(Pin(20, Pin.OUT), freq=50, duty=0)
-        self.inp0 = Pin(17, Pin.IN, Pin.PULL_UP)
-        self.inp1 = Pin(20, Pin.IN, Pin.PULL_UP)
-        # self.p18 = Pin(18, Pin.IN, Pin.PULL_DOWN)
+        self.PIN17 = Pin(17, Pin.IN, Pin.PULL_DOWN)
+        self.PIN18 = Pin(18, Pin.IN, Pin.PULL_DOWN)
+        self.PWM19 = PWM(Pin(19, Pin.OUT), freq=50, duty=0)
+        self.PWM20 = PWM(Pin(20, Pin.OUT), freq=50, duty=0)
+        self.P21 = PWM(Pin(21, Pin.OUT), freq=50, duty=0)
         self.init_oled()
         self.init_aht20()
         self.init_pixcel()
@@ -89,9 +95,9 @@ class Device:
         self.adc0 = None
         self.adc2 = ADC(0)
         self.adc1 = ADC(1)
-        self.out0 = PWM(Pin(2, Pin.OUT))
-        self.inp0 = Pin(3, Pin.IN, Pin.PULL_UP)
-        self.inp1 = Pin(7, Pin.IN, Pin.PULL_UP)
+        self.P21 = PWM(Pin(2, Pin.OUT))
+        self.PIN17 = Pin(3, Pin.IN, Pin.PULL_UP)
+        self.PIN18 = Pin(7, Pin.IN, Pin.PULL_UP)
         self.out3 = NeoPixel(Pin(21, Pin.OUT), 4)
         self.i2c = I2C(0, scl=Pin(1), sda=Pin(0))
         self.init_oled()
@@ -122,8 +128,9 @@ class Device:
     def get_button_state(self, button_name):
         return self.button_state[button_name]
     
+    '''
     def handle_button_event(self, pin, button_name):
-        if pin.value() == 0:  # ボタンが押された
+        if pin.value() == 1:  # ボタンが押された
             if not self.button_state[button_name]['pressed']:
                 self.button_state[button_name]['pressed'] = True
                 self.button_state[button_name]['press_time'] = time.ticks_ms()
@@ -140,31 +147,67 @@ class Device:
                     self.button_notification(button_name, "UP")
 
     def register_button_irq(self):
-        self.inp0.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: self.handle_button_event(pin, 'A'))
-        self.inp1.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: self.handle_button_event(pin, 'B'))
+        self.PIN17.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: self.handle_button_event(pin, 'B'))
+        self.PIN18.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: self.handle_button_event(pin, 'A'))
+    '''
+    def handle_button_event(self, pin, pinIndex):
+        # time.sleep_ms(80)  # 80msの遅延を追加してチャタリングを軽減
+        current_event = "RISE" if pin.value() == 1 else "FALL"
+        if pinIndex not in self.pin_event_time:
+            self.pin_event_time[pinIndex] = ''
 
+        if current_event == self.pin_event_time[pinIndex]:
+            return  # 同じイベントが発生した場合は無視
+        self.pin_event_time[pinIndex] = current_event
+        self.pin_notification(pinIndex, current_event)
+
+    def register_button_irq(self):
+        self.PIN17.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: self.handle_button_event(pin, 17))
+        self.PIN18.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: self.handle_button_event(pin, 18))
+
+    # print(f"ピン {pin} に {n} を出力")
+    def digital_out(self, pin, n):
+        if pin == 19:
+            pwm = self.PWM19
+        elif pin == 20:
+            pwm = self.PWM20
+        else:
+            return
+        if n == 0:
+            pwm.duty_u16(0)
+        else:
+            pwm.duty_u16(65535)
+
+    # print(f"ピン {pin} をアナログ出力 {n} %にする")
     def analog_out(self, pin, n):
-        # print(f"ピン {pin} をアナログ出力 {n} %にする")
-        if pin == 0 or pin == 21:
-            self.out0.duty_u16(int(65535 * n / 1024))
-        elif pin == 1 or pin == 19:
-            self.out1.duty_u16(int(65535 * n / 1024))
-        elif pin == 2 or pin == 20:
-            self.out2.duty_u16(int(65535 * n / 1024))
+        if pin == 19:
+            pwm = self.PWM19
+        elif pin == 20:
+            pwm = self.PWM20
+        else:
+            return
+        duty = int(65535 * n / 1024)
+        pwm.duty_u16(duty)
 
     async def do_command(self, data):
         # バイナリデータをリストに変換
         data_list = list(data)
         # print(data_list)  # 出力: [1, 72, 101, 108, 108, 111]
         command_id = data_list[0]
+        # print("Command ID:", command_id)
         if command_id == 65:
             # 文字 s を t ミリ秒間隔で流す
             self.show_text(data[2:].decode('utf-8'), data[1])
+        elif command_id == 33:
+            # ピン pin を デジタル出力 n にする
+            pin = data[1]
+            val = data[2]
+            self.digital_out(pin, val)
         elif command_id == 34:
-            # ピン pin をアナログ出力 n %にする
+            # ピン pin を PWM 出力 n %にする
             pin = data[1]
             uint16_value = struct.unpack('<H', data[2:4])[0]     # 続く2バイトを数値に変換
-            # print("ピン", pin, "をアナログ出力", uint16_value, "%にする")
+            # print("ピン", pin, "を PWM 出力", uint16_value, "%にする")
             self.analog_out(pin, uint16_value)
         elif command_id == 96:
             # 音を消す
@@ -179,19 +222,18 @@ class Device:
             label = data[1:9].decode('utf-8')
             value = data[9:].decode('utf-8')
             print("label:", label, value)
-            # NeoPixcelを光らせる
-            if label=='pixcel-0':
-                self.pixcel_n(0, value)
-            elif label=='pixcel-1':
-                self.pixcel_n(1, value)
-            elif label=='pixcel-2':
-                self.pixcel_n(2, value)
         elif command_id == 66:
             # アイコン表示（上5x3）
             self.draw_icon(data[1:], 0, 0)
         elif command_id == 67:
             # アイコン表示（下5x2）
             self.draw_icon(data[1:], 0, 3)   # 下の部分だけ書き直す
+        elif command_id == 161:  # SetNeoPixcelColor(n, r, g, b)
+            n = data[1]
+            r = data[2]
+            g = data[3]
+            b = data[4]
+            self.pixcel(n, r, g, b)
         else:
             print("Command ID", command_id, "is not defined.")
         return True
@@ -213,8 +255,8 @@ class Device:
             self.oled.show()
 
     def play_tone(self, f, v):
-        self.out0.freq(int(f))
-        self.out0.duty_u16(int(v * 32768 / 100))
+        self.P21.freq(int(f))
+        self.P21.duty_u16(int(v * 32768 / 100))
 
     def stop_tone(self):
         self.play_tone(50, 0)
@@ -239,20 +281,9 @@ class Device:
             humidity = 0
         return temperature, humidity
 
-    def rgb(self, r, g, b):
-        return (g, r, b)
-
     def pixcel(self, n, r, g, b):
-        self.out3[n] = self.rgb(int(r / 100 * 255), int(g / 100 * 255), int(b / 100 * 255))  # n番の NeoPixel を点灯
+        self.out3[n] = (int(g / 100 * 255), int(r / 100 * 255), int(b / 100 * 255))  # n番の NeoPixel を点灯
         self.out3.write()
-
-    def pixcel_n(self, n, value):
-        v = value.split(',')
-        try:
-            self.pixcel(n, int(v[0]), int(v[1]), int(v[2]))
-        except:
-            print("Pixcel Error")
-            self.pixcel(n, 0, 0, 0)
 
     def init_pixcel(self):
         self.pixcel(0, 0, 0, 0)
@@ -263,6 +294,7 @@ class Device:
         volt = ADC(3).read_u16() / 65535 * 3.3 * 3
         return volt
 
+    # ボタンのイベントをBLEで通知する
     def button_notification(self, button_name, event_name):
         buffer = bytearray(20)
         buffer[19] = MbitMoreDataFormat["ACTION_EVENT"]
@@ -274,13 +306,24 @@ class Device:
         buffer[0:8] = packed_data
         self.ble_conn.send_notification(buffer)
 
+    # ピンのイベントをBLEで通知する
+    # pinIndex = dataView.getUint8(0);
+    # event = dataView.getUint8(1);
+    # value: dataView.getUint32(2, true)
+    def pin_notification(self, pinIndex, event_name):
+        print(f"ピン {pinIndex} に {event_name} イベント")
+        buffer = bytearray(20)
+        buffer[19] = MbitMoreDataFormat["PIN_EVENT"]
+        event = MbitMorePinEvent[event_name]
+        timestamp = time.ticks_ms()
+        packed_data = struct.pack('<BBI', pinIndex, event, timestamp)
+        buffer[0:6] = packed_data
+        self.ble_conn.send_notification(buffer)
+
     # 定期的にハードウェアのセンサ値を送信する
     '''
-    this.gpio = [
-        0, 1, 2,
-        8,
-        12, 13, 14, 15, 16
-    ];
+    // this.gpio = [0, 1, 2, 8, 12, 13, 14, 15, 16];
+    this.gpio = [0, 1, 2, 16, 17, 18, 19, 20, 21];
     以下は + 24
     const MbitMoreButtonStateIndex = {
         P0: 0,
@@ -292,9 +335,13 @@ class Device:
     };
     '''
     def send_sensor_value(self):
-        btna = 1 if self.inp0.value() == 0 else 0
-        btnb = 1 if self.inp1.value() == 0 else 0
+        p17 = 0 if self.PIN17.value() == 0 else 1
+        p18 = 0 if self.PIN18.value() == 0 else 1
+        btnb = p17
+        btna = p18
         gpio_data = (
+            (p17 << 17) |
+            (p18 << 18) |
             (btna << 3+24) |
             (btnb << 4+24) |
             (self.human_sensor() << 5+24)
