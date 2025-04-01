@@ -1,5 +1,5 @@
+# ESP32C6 pcratch-IoT v1.3.2
 # 天気予報のデモ
-# ESP32C6 pcratch-IoT(micro:bit) v1.2.4
 
 import asyncio
 import network
@@ -8,10 +8,13 @@ from iotclock import Clock
 from machine import Pin, I2C, ADC, PWM
 from ssd1306 import SSD1306_I2C
 from neopixel import NeoPixel
+from ahtx0 import AHT20
 
 # OLEDの初期化
 i2c = I2C(0, scl=Pin(23), sda=Pin(22))
 oled = SSD1306_I2C(128, 64, i2c)
+# AHT20の初期化
+aht20 = AHT20(i2c)
 # NeoPixelの初期化
 out3 = NeoPixel(Pin(16, Pin.OUT), 4)
 out3[0] = (0,0,0)
@@ -50,16 +53,23 @@ async def main():
 
         weather = Weather(oled)
         iotclock = Clock(oled)
+        print('時計合わせ...')
         await iotclock.get_ntptime()
+        print('天気予報取得...')
         await weather.fetch_weather("東京")
         await asyncio.sleep(1)
 
         while True:
             for _ in range(10):
-                iotclock.display_time()
+                temperature = aht20.temperature
+                humidity = aht20.relative_humidity
+                iotclock.display_time(temperature, humidity)
                 await asyncio.sleep(1)
-            weather.display_weather()
-            await asyncio.sleep(10)
+            for _ in range(10):
+                temperature = aht20.temperature
+                humidity = aht20.relative_humidity
+                weather.display_weather(temperature, humidity)
+                await asyncio.sleep(1)
     except OSError as e:
         print(f"Failed to connect to WiFi: {e}")
 

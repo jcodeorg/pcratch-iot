@@ -1,4 +1,4 @@
-# ESP32C6 pcratch-IoT(micro:bit) v1.2.0
+# ESP32C6 pcratch-IoT v1.3.2
 # ネットワーク対応時計
 
 import ntptime
@@ -6,30 +6,41 @@ import time
 import framebuf
 import asyncio
 
-days_of_week = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+days_of_week = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 class Clock:
     def __init__(self, oled):
         self.oled = oled
 
     async def get_ntptime(self):
+        async def set_time():
+            ntptime.settime()
+
         while True:
             try:
-                ntptime.settime()
+                # asyncio.wait_forを使用して5秒でタイムアウト
+                await asyncio.wait_for(set_time(), timeout=5)
+                print("時刻同期に成功しました")
                 break
-            except:
-                await asyncio.sleep(1)
+            except asyncio.TimeoutError:
+                print("時刻同期がタイムアウトしました")
+            except Exception as e:
+                print(f"時刻同期に失敗しました: {e}")
+            await asyncio.sleep(1)
 
-    def display_time(self):
+    def display_time(self, temperature = 0, humidity = 0):
         current_time = time.localtime(time.time() + 9 * 3600)  # 9時間（9 * 3600秒）を加算
-        formatted_date = "{:04}-{:02}-{:02}({})".format(current_time[0], current_time[1], current_time[2], days_of_week[current_time[6]])
+        formatted_date = "{:04}-{:02}-{:02} {}".format(current_time[0], current_time[1], current_time[2], days_of_week[current_time[6]])
         formatted_time = "{:02}:{:02}:{:02}".format(current_time[3], current_time[4], current_time[5])
+        formatted_temp = "{:5.1f}C {:5.1f}%".format(temperature, humidity)
 
         # 上10ドットをそのままにして、下の部分だけ書き直す
         if self.oled:
-            self.oled.fill_rect(0, 10, self.oled.width, self.oled.height - 10, 0)
+            self.oled.fill_rect(0, 0, self.oled.width, self.oled.height - 0, 0)
             self.oled.text(formatted_date, 0, 10)
             self.draw_text_double_size(formatted_time, 0, 30)
+            self.oled.line(0, 50, 127, 50, 1)
+            self.oled.text(formatted_temp, 0, 54)
             self.oled.show()
 
     def draw_text_double_size(self, text, x, y):
