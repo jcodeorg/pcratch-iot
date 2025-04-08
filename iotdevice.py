@@ -1,4 +1,4 @@
-# ESP32C6 pcratch-IoT(micro:bit) v1.2.4
+# ESP32C6 pcratch-IoT(micro:bit) v1.2.5
 import os
 import struct
 import time
@@ -282,7 +282,7 @@ class Device:
         return temperature, humidity
 
     def pixcel(self, n, r, g, b):
-        self.out3[n] = (int(g / 100 * 255), int(r / 100 * 255), int(b / 100 * 255))  # n番の NeoPixel を点灯
+        self.out3[n] = (int(r / 100 * 255), int(g / 100 * 255), int(b / 100 * 255))  # n番の NeoPixel を点灯
         self.out3.write()
 
     def init_pixcel(self):

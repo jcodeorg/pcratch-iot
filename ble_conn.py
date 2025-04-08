@@ -47,7 +47,7 @@ class BLEConnection:
         # mac_str = '.'.join(str(b) for b in mac[-3:])
         # self.NAME = f"BBC micro:bit [{mac_str}]"
         self.riendly_name = microbit_friendly_name(self.mac)
-        self.NAME = f"BBC micro:bit [{self.riendly_name}]"
+        self.NAME = f"PcratchIoT-{self.riendly_name}"
         print(self.NAME)
         self.connection = None  # 接続オブジェクトを初期化
         # 受信したコマンドの処理

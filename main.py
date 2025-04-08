@@ -1,5 +1,6 @@
-# ESP32C6 pcratch-IoT(micro:bit) v1.3.1
+# ESP32C6 pcratch-IoT v1.3.4
 from machine import Pin
+from neopixel import NeoPixel
 import time
 
 # ボタンの初期化 (例: GPIOピン17)
@@ -7,6 +8,12 @@ button = Pin(17, Pin.IN, Pin.PULL_DOWN)
 
 # 起動時にボタンが押されているか確認
 time.sleep(0.5)  # 電源投入時の安定化のための遅延
+
+# NeoPixelの初期化
+np = NeoPixel(Pin(16, Pin.OUT), 2)
+np[0] = (0,0,0)
+np[1] = (0,0,0)
+np.write()
 
 # デフォルトのSSID、パスワード、メインモジュールを読み込む
 default_ssid = ""

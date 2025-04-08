@@ -1,4 +1,4 @@
-# ESP32C6 pcratch-IoT v1.3.2
+# ESP32C6 pcratch-IoT v1.3.4
 # 天気予報のデモ
 
 import asyncio
@@ -13,13 +13,18 @@ from ahtx0 import AHT20
 # OLEDの初期化
 i2c = I2C(0, scl=Pin(23), sda=Pin(22))
 oled = SSD1306_I2C(128, 64, i2c)
+def oled_print(text):
+    oled.fill(0)
+    oled.text(text, 0, 32)
+    oled.show()
+
 # AHT20の初期化
 aht20 = AHT20(i2c)
 # NeoPixelの初期化
-out3 = NeoPixel(Pin(16, Pin.OUT), 4)
-out3[0] = (0,0,0)
-out3[1] = (0,0,0)
-out3.write()
+np = NeoPixel(Pin(16, Pin.OUT), 2)
+np[0] = (0,0,0)
+np[1] = (0,0,0)
+np.write()
 
 # デフォルトのSSID、パスワード、メインモジュールを読み込む
 default_ssid = ""
@@ -39,6 +44,12 @@ except:
 print("デフォルトSSID:", default_ssid)
 print("デフォルトパスワード:", default_password)
 print("デフォルトメインモジュール:", default_main_module)
+
+oled.fill(0)
+oled.text(default_ssid, 0, 10)
+oled.text(default_password, 0, 20)
+oled.text(default_main_module, 0, 30)
+oled.show()
 
 # main関数
 async def main():
@@ -72,5 +83,16 @@ async def main():
                 await asyncio.sleep(1)
     except OSError as e:
         print(f"Failed to connect to WiFi: {e}")
+
+# メモリ使用量を表示
+def print_memory_usage():
+    gc.collect()  # ガベージコレクションを実行してメモリを解放
+    free_memory = gc.mem_free()  # 使用可能なメモリ量を取得
+    allocated_memory = gc.mem_alloc()  # 割り当てられたメモリ量を取得
+    total_memory = free_memory + allocated_memory  # 合計メモリ量を計算
+
+    print("Free memory: {} bytes".format(free_memory))
+    print("Allocated memory: {} bytes".format(allocated_memory))
+    print("Total memory: {} bytes".format(total_memory))
 
 asyncio.run(main())
