@@ -7,6 +7,7 @@ from iotclock import Clock
 import gc
 from ble_conn import BLEConnection
 from iotdevice import Device
+from hardware import Hardware
 
 # デフォルトのSSID、パスワード、メインモジュールを読み込む
 SSID = ""
@@ -32,6 +33,7 @@ class IoTManager:
     def __init__(self):
         self.ble_conn = BLEConnection()
         self.device = Device(self.ble_conn)
+        self.hardware = Hardware()
         self.connected_displayed = False
         self.temp_data = []
         self.humi_data = []
@@ -50,26 +52,26 @@ class IoTManager:
     # センサーの値をOLEDに表示
     def disp_sensor_value(self):
         # print("disp_sensor_value")
-        device = self.device
+        hardware = self.hardware
         if self.ble_conn.connection:
             if not self.connected_displayed:
-                device.show_text("Connected!!")
+                hardware.show_text("Connected!!")
                 self.connected_displayed = True
         else:
-            device.show_text(self.ble_conn.NAME[-16:])
+            hardware.show_text(self.ble_conn.NAME[-16:])
             self.connected_displayed = False
 
         # 温度、湿度を取得
-        temperature, humidity = self.device.temp_humi()
+        temperature, humidity = self.hardware.temp_humi()
 
         # OLEDディスプレイに表示
-        if device.oled:
-            device.oled.fill_rect(0, 10, device.oled.width, device.oled.height - 10, 0)
-            device.oled.text("Temp: {:.1f}C".format(temperature), 0, 10)
-            device.oled.text("Humi: {:.1f}%".format(humidity), 0, 20)
-            device.oled.text("l{:5.1f}".format(device.lux()), 72, 30)
-            device.oled.text("H{:5d}".format(device.human_sensor()), 72, 40)
-            device.oled.show()
+        if hardware.oled:
+            hardware.oled.fill_rect(0, 10, hardware.oled.width, hardware.oled.height - 10, 0)
+            hardware.oled.text("Temp: {:.1f}C".format(temperature), 0, 10)
+            hardware.oled.text("Humi: {:.1f}%".format(humidity), 0, 20)
+            hardware.oled.text("l{:5.1f}".format(hardware.lux()), 72, 30)
+            hardware.oled.text("H{:5d}".format(hardware.human_sensor()), 72, 40)
+            hardware.oled.show()
 
     # センサーの値を 250ms 毎に送信
     async def sensor_task(self):
@@ -79,23 +81,24 @@ class IoTManager:
             await asyncio.sleep_ms(250)
 
 from server import IoTServer  # 作成したモジュールをインポート
+import _thread
 
-async def start_server_async(iot_server):
-    """サーバーを非同期で実行"""
-    await asyncio.sleep(0)  # 非同期タスクとして動作させるためのダミー
-    iot_server.start_server()
+# サーバーをバックグラウンドスレッドで実行
+def server_thread():
+    server = IoTServer()
+    server.start_wifi()  # Wi-Fiを起動
+    server.start_http_server()  # HTTPサーバーを起動
 
 async def main():
-    # IoTServerのインスタンスを作成
-    # iot_server = IoTServer()
-
-    # サーバーを非同期タスクとして実行
-    # asyncio.create_task(start_server_async(iot_server))
-
     # インスタンスの作成と使用例
     iot_manager = IoTManager()
+    #bitmap = iot_manager.hardware.get_oled_bitmap()
+    #print(len(bitmap))
+
+    _thread.start_new_thread(server_thread, ())
+
     while True:
-        print("メイン処理実行中...")
+        # print("メイン処理実行中...")
         iot_manager.disp_sensor_value()
         await asyncio.sleep(1)
 

@@ -1,0 +1,242 @@
+# ESP32C6 pcratch-IoT(micro:bit) v1.2.5
+import os
+import struct
+import time
+import framebuf
+from machine import Pin, I2C, ADC, PWM
+from ssd1306 import SSD1306_I2C
+from neopixel import NeoPixel
+from ahtx0 import AHT20
+
+class Hardware:
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if not cls._instance:
+            cls._instance = super(Hardware, cls).__new__(cls, *args, **kwargs)
+        return cls._instance
+
+    def __init__(self):
+        if not hasattr(self, "initialized"):  # 初期化が1回だけ行われるようにする
+            self.initialized = True
+            print("Initializing hardware...")
+            # ESP32C6 Pin layout
+            # GPIO0 :A0 :         5V
+            # GPIO1 :A1 :         GND
+            # GPIO2 :A2 :         3V3
+            # GPIO21:   : Speaker GPIO18:   :Left Button
+            # GPIO22:SDA:         GPIO20:   :
+            # GPIO23:SDL:         GPIO19:   :
+            # GPIO16:TX : NP-LED  GPIO17:RX :Right Button
+            print("Welcome to ESP32C6")
+            self.adc0 = Pin(0, Pin.IN, Pin.PULL_DOWN)
+            self.adc1 = ADC(Pin(1, Pin.IN))
+            self.adc2 = ADC(Pin(2, Pin.IN))
+            self.adc2.atten(ADC.ATTN_11DB)
+            self.adc2.width(ADC.WIDTH_12BIT)
+            self.i2c = I2C(0, scl=Pin(23), sda=Pin(22))
+            self.PIN16 = NeoPixel(Pin(16, Pin.OUT), 2)
+            self.PIN17 = Pin(17, Pin.IN, Pin.PULL_DOWN)
+            self.PIN18 = Pin(18, Pin.IN, Pin.PULL_DOWN)
+            self.PWM19 = PWM(Pin(19, Pin.OUT), freq=50, duty=0)
+            self.PWM20 = PWM(Pin(20, Pin.OUT), freq=50, duty=0)
+            self.PWM21 = PWM(Pin(21, Pin.OUT), freq=50, duty=0)
+            self.init_oled()
+            self.init_aht20()
+            self.init_pixcel()
+            self.register_button_irq()
+            self.pin_event_time = {}
+            self.button_handlers = {}  # ハンドラーを登録する辞書
+
+    def init_oled(self):
+        self.oled = None
+        try:
+            self.oled = SSD1306_I2C(128, 64, self.i2c)
+        except OSError as e:
+            print(f"Error initializing oled: {e}")
+    
+    # 画面をさかさまにするコマンドを送信
+    def flip_display(self):
+        self.oled.write_cmd(0xA0)  # セグメントリマップ
+        self.oled.write_cmd(0xC0)  # COM出力スキャン方向
+
+    def init_aht20(self):
+        self.aht20 = None
+        try:
+            self.aht20 = AHT20(self.i2c)
+        except OSError as e:
+            print(f"Error initializing aht20: {e}")
+
+    # ボタンの状態を取得
+    def get_button_state(self, button_name):
+        return self.button_state[button_name]
+
+    def register_button_handler(self, pinIndex, handler):
+        """ボタンイベントのハンドラーを登録"""
+        self.button_handlers[pinIndex] = handler
+
+    def handle_button_event(self, pin, pinIndex):
+        # time.sleep_ms(80)  # 80msの遅延を追加してチャタリングを軽減
+        current_event = "RISE" if pin.value() == 1 else "FALL"
+        if pinIndex not in self.pin_event_time:
+            self.pin_event_time[pinIndex] = ''
+
+        if current_event == self.pin_event_time[pinIndex]:
+            return  # 同じイベントが発生した場合は無視
+        self.pin_event_time[pinIndex] = current_event
+        # self.pin_notification(pinIndex, current_event)
+        # 登録されたハンドラーを呼び出す
+        if pinIndex in self.button_handlers:
+            handler = self.button_handlers[pinIndex]
+            handler(pinIndex, current_event)  # ハンドラーにイベントを渡す
+
+    def register_button_irq(self):
+        """ボタンのIRQを登録"""
+        self.PIN17.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: self.handle_button_event(pin, 17))
+        self.PIN18.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: self.handle_button_event(pin, 18))
+
+    # print(f"ピン {pin} に {n} を出力")
+    def digital_out(self, pin, n):
+        if pin == 19:
+            pwm = self.PWM19
+        elif pin == 20:
+            pwm = self.PWM20
+        else:
+            return
+        if n == 0:
+            pwm.duty_u16(0)
+        else:
+            pwm.duty_u16(65535)
+
+    # print(f"ピン {pin} をアナログ出力 {n} %にする")
+    def analog_out(self, pin, n):
+        if pin == 19:
+            pwm = self.PWM19
+        elif pin == 20:
+            pwm = self.PWM20
+        else:
+            return
+        duty = int(65535 * n / 100)
+        pwm.duty_u16(duty)
+
+    def show_text(self, s, t=0):
+        # print(f"文字 {s} を {t} ミリ秒間隔で流す")
+        # 上10ドットを消去
+        if self.oled:
+            self.oled.fill_rect(0, 0, self.oled.width, 10, 0)
+            self.oled.text(s, 0, 0)
+            self.oled.show()
+
+    def draw_icon(self, icon, x, y):
+        if self.oled:
+            self.oled.fill_rect(x, y, 8, 5, 0)
+            for dx, val in enumerate(icon):
+                if val:
+                    self.oled.pixel(x + dx % 5, y + int(dx / 5), 1)
+            self.oled.show()
+
+    def play_tone(self, f, v = 100):
+        print(f"Tone {f}Hz {v}% ...")
+        self.PWM21.freq(int(f))
+        self.PWM21.duty_u16(32768)  # duty_u16を50%に設定（65535の半分）
+
+    def stop_tone(self):
+        print("Tone off")
+        self.PWM21.duty_u16(0)    # 音を消す
+
+    def human_sensor(self):
+        if self.adc0:
+            val = self.adc0.value()
+            if val != 0:
+                return 1
+        return 0
+
+    def lux(self):
+        val = self.adc2.read_u16() / 65535 * 3.6 * 20/9/10000 * (10 ** 6)
+        return val
+
+    def temp_humi(self):
+        if self.aht20:
+            temperature = self.aht20.temperature
+            humidity = self.aht20.relative_humidity
+        else:
+            temperature = 0
+            humidity = 0
+        return temperature, humidity
+
+    def pixcel(self, n, r, g, b):
+        self.PIN16[n] = (int(r / 100 * 255), int(g / 100 * 255), int(b / 100 * 255))  # n番の NeoPixel を点灯
+        self.PIN16.write()
+
+    def init_pixcel(self):
+        self.pixcel(0, 0, 0, 0)
+
+    # ESP32 VSYS電源電圧を取得する
+    def getVsys(self):
+        Pin(29, Pin.IN)
+        volt = ADC(3).read_u16() / 65535 * 3.3 * 3
+        return volt
+
+    def get_oled_bitmap(self):
+        """OLEDのバッファを24ビットBMP形式で取得"""
+        if self.oled:
+            print("get_oled_bitmap")
+            # OLEDのバッファを取得
+            width, height = self.oled.width, self.oled.height
+            row_size = (width * 3 + 3) // 4 * 4  # 各行のバイト数（4バイト境界に揃える）
+            pixel_array_size = row_size * height
+            file_size = 54 + pixel_array_size  # ヘッダー(54バイト) + ピクセルデータ
+
+            # BMPヘッダーを作成
+            bmp_header = bytearray([
+                0x42, 0x4D,  # "BM" signature
+                file_size & 0xFF, (file_size >> 8) & 0xFF, (file_size >> 16) & 0xFF, (file_size >> 24) & 0xFF,  # ファイルサイズ
+                0x00, 0x00,  # 予約領域1
+                0x00, 0x00,  # 予約領域2
+                0x36, 0x00, 0x00, 0x00,  # ピクセルデータのオフセット (54バイト)
+                0x28, 0x00, 0x00, 0x00,  # ヘッダーサイズ (40バイト)
+                width & 0xFF, (width >> 8) & 0xFF, 0x00, 0x00,  # 幅
+                height & 0xFF, (height >> 8) & 0xFF, 0x00, 0x00,  # 高さ
+                0x01, 0x00,  # プレーン数 (1)
+                0x18, 0x00,  # ビット/ピクセル (24)
+                0x00, 0x00, 0x00, 0x00,  # 圧縮形式 (なし)
+                pixel_array_size & 0xFF, (pixel_array_size >> 8) & 0xFF, (pixel_array_size >> 16) & 0xFF, (pixel_array_size >> 24) & 0xFF,  # 画像データサイズ
+                0x13, 0x0B, 0x00, 0x00,  # 水平解像度 (2835ピクセル/m)
+                0x13, 0x0B, 0x00, 0x00,  # 垂直解像度 (2835ピクセル/m)
+                0x00, 0x00, 0x00, 0x00,  # 使用色数 (0 = 全色)
+                0x00, 0x00, 0x00, 0x00   # 重要色数 (0 = 全色)
+            ])
+
+            # OLEDのピクセルデータを取得
+            buffer = bytearray(width * height)  # バッファを作成
+            fb = framebuf.FrameBuffer(buffer, width, height, framebuf.MONO_HLSB)
+
+            # OLEDの内容をバッファにコピー
+            for y in range(height):
+                for x in range(width):
+                    if self.oled.pixel(x, y):
+                        fb.pixel(x, y, 1)
+
+            # ピクセルデータを作成
+            bmp_data = bytearray(len(bmp_header) + pixel_array_size)  # 必要なサイズのバッファを確保
+            bmp_data[:len(bmp_header)] = bmp_header  # ヘッダーをコピー
+
+            # ピクセルデータをバッファに書き込む
+            for y in range(height - 1, -1, -1):  # 下から上に向かってコピー
+                row_start = len(bmp_header) + y * row_size
+                for x in range(width):
+                    pixel = fb.pixel(x, y)
+                    if pixel:
+                        # 白 (RGB: 255, 255, 255)
+                        bmp_data[row_start + x * 3:row_start + x * 3 + 3] = b'\xFF\xFF\xFF'
+                    else:
+                        # 黒 (RGB: 0, 0, 0)
+                        bmp_data[row_start + x * 3:row_start + x * 3 + 3] = b'\x00\x00\x00'
+                # パディングを追加（4バイト境界に揃える）
+                padding_start = row_start + width * 3
+                bmp_data[padding_start:padding_start + (row_size - width * 3)] = b'\x00' * (row_size - width * 3)
+
+            print("end get_oled_bitmap")
+            return bmp_data
+
+        return None

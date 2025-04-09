@@ -7,18 +7,75 @@ import time
 from machine import Pin, PWM
 from neopixel import NeoPixel
 import uasyncio as asyncio
+import framebuf
+from hardware import Hardware
 
 class IoTServer:
     def __init__(self):
         # アクセスポイントの設定
         self.PASSWORD = "12345678"
-        self.speaker = PWM(Pin(21, Pin.OUT))
-        self.speaker.freq(440)
-        self.speaker.duty_u16(0)
-        self.np = NeoPixel(Pin(16, Pin.OUT), 2)
-        self.default_ssid = ""
-        self.default_password = ""
-        self.default_main_module = ""
+        self.hardware = Hardware()
+
+        #self.speaker = PWM(Pin(21, Pin.OUT))
+        #self.speaker.freq(440)
+        #self.speaker.duty_u16(0)
+        #self.np = NeoPixel(Pin(16, Pin.OUT), 2)
+        # self.oled = None
+        # self.default_ssid = ""
+        # self.default_password = ""
+        # self.default_main_module = ""
+        self.running = True  # サーバーの実行状態を管理するフラグ
+
+    def start_wifi(self):
+        """Wi-FiをSTAモードで起動"""
+        sta = network.WLAN(network.AP_IF)
+        sta.active(True)
+        SSID = "PcratchIoT-" + self.microbit_friendly_name(sta.config('mac'))
+        print("SSID:", SSID)
+        sta.config(essid=SSID, password=self.PASSWORD)
+        print("Wi-Fi接続中...")
+        while not sta.isconnected():
+            time.sleep(1)
+        print("Wi-Fi接続完了:", sta.ifconfig())
+
+    def stop_server(self):
+        """サーバーを停止"""
+        self.running = False
+        print("サーバーを停止します")
+
+    
+    def handle_get_bitmap(self, cl):
+        """OLEDのビットマップをBMP形式でHTTPレスポンスとして送信"""
+        # OLEDのビットマップデータを取得
+        bitmap = self.hardware.get_oled_bitmap()
+        print(len(bitmap))
+
+        #with open("test.bmp", "rb") as bmp_file:
+        #    bitmap = bmp_file.read()
+
+        if bitmap:
+            # HTTPレスポンスを作成
+            response = b"HTTP/1.1 200 OK\r\n" \
+                    b"Content-Type: image/bmp\r\n" \
+                    b"Content-Disposition: inline; filename=\"oled_bitmap.bmp\"\r\n" \
+                    b"\r\n"
+
+            # クライアントにレスポンスを送信
+            try:
+                cl.send(response)
+                cl.send(bitmap)
+                print("ビットマップデータを送信しました")
+            except Exception as e:
+                print(f"ビットマップ送信中にエラーが発生しました: {e}")
+        else:
+            # エラー応答
+            response = b"HTTP/1.1 500 Internal Server Error\r\n" \
+                    b"Content-Type: text/plain\r\n\r\n" \
+                    b"OLEDが初期化されていません"
+            try:
+                cl.send(response)
+            except Exception as e:
+                print(f"エラー応答送信中にエラーが発生しました: {e}")
 
     def microbit_friendly_name(self, unique_id):
         """ユニークIDからフレンドリー名を生成"""
@@ -58,10 +115,9 @@ class IoTServer:
 
     def play_tone(self, frequency, duration):
         """指定した周波数と持続時間で音を再生"""
-        self.speaker.freq(frequency)
-        self.speaker.duty_u16(32768)
+        self.hardware.play_tone(frequency)
         time.sleep(duration / 2)
-        self.speaker.duty_u16(0)
+        self.hardware.stop_tone()  # 音を止める
         time.sleep(0.01)
 
     def play_melody(self):
@@ -77,25 +133,23 @@ class IoTServer:
             self.play_tone(frequency, duration)
 
     def np_reset(self):
-        """NeoPixelをリセット"""
-        self.np[0] = (0, 0, 0)
-        self.np[1] = (0, 0, 0)
-        self.np.write()
+        self.hardware.pixcel(0, 0, 0, 0)
+        self.hardware.pixcel(1, 0, 0, 0)
 
     def color_wipe(self, color, delay=200):
         """NeoPixelを指定した色に変化させる"""
-        for i in range(len(self.np)):
-            self.np[i] = color
-            self.np.write()
+        for i in range(2):
+            r, g, b = color
+            self.hardware.pixcel(i, r / 255 * 100, g / 255 * 100, b / 255 * 100)
             time.sleep_ms(delay)
 
     def rainbow_cycle(self, delay=20):
         """虹色のアニメーションを作成"""
         for j in range(256):
-            for i in range(len(self.np)):
-                pixel_index = (i * 256 // len(self.np)) + j
-                self.np[i] = self.wheel(pixel_index & 255)
-            self.np.write()
+            for i in range(2):
+                pixel_index = (i * 256 // 2) + j
+                r, g, b = self.wheel(pixel_index & 255)
+                self.hardware.pixcel(i, r / 255 * 100, g / 255 * 100, b / 255 * 100)
             time.sleep_ms(delay)
 
     def wheel(self, pos):
@@ -109,19 +163,24 @@ class IoTServer:
             pos -= 170
             return (0, pos * 3, 255 - pos * 3)
 
+    def npoff(self):
+        """NeoPixelを消灯"""
+        for i in range(2):
+            self.hardware.pixcel(i, 0, 0, 0)
+
     def demo1(self):
         """デモ1: 赤、緑、青の順に点灯"""
         for i in range(3):
             self.color_wipe((255, 0, 0))
             self.color_wipe((0, 255, 0))
             self.color_wipe((0, 0, 255))
-            self.np_reset()
             time.sleep(0.5)
+        self.npoff()
 
     def demo2(self):
         """デモ2: 虹色アニメーション"""
         self.rainbow_cycle()
-        self.np_reset()
+        self.npoff()
 
     # デフォルトのHTMLレスポンス
     def get_default_response(self):
@@ -221,6 +280,9 @@ Content-Type: text/html; charset=utf-8
     <button onclick="location.href='/demo1'">デモ1</button>
     <button onclick="location.href='/demo2'">デモ2</button>
     <button onclick="location.href='/demo3'">メロディ</button>
+
+    <img src="/oled_bitmap.bmp" alt="OLED Bitmap">
+
 </body>
 </html>
 """
@@ -244,110 +306,116 @@ Content-Type: text/html; charset=utf-8
             print("wifi_config.txt ファイルが見つかりません。デフォルト値を使用します。")
         return default_ssid, default_password, default_main_module
 
-    def start_server(self):
-        print("start_server...")
-        """Configを読み込む"""
-        default_ssid, default_password, default_main_module = self.get_config()
-        print("デフォルトSSID:", default_ssid)
-        print("デフォルトパスワード:", default_password)
-        print("デフォルトメインモジュール:", default_main_module)
+    def handle_request(self, cl, request):
+        # GETリクエストでフォームを表示
+        if "GET / " in request:
+            print("GET リクエストを処理中")
+            """Configを読み込む"""
+            default_ssid, default_password, default_main_module = self.get_config()
+            print("デフォルトSSID:", default_ssid)
+            print("デフォルトパスワード:", default_password)
+            print("デフォルトメインモジュール:", default_main_module)
+
+            sta = network.WLAN(network.STA_IF)  # STAモードのインスタンスを作成
+            if not sta.active():
+                print("STAモードを有効化します...")
+                sta.active(True)  # STAモードを有効化
+            else:
+                print("STAモードは既に有効です")
+
+            # Wi-Fiネットワークをスキャン
+            networks = sta.scan()
+            ssid_options = ""
+            for net in networks:
+                ssid = net[0].decode("utf-8")
+                selected = "selected" if ssid == default_ssid else ""
+                ssid_options += f'<option value="{ssid}" {selected}>{ssid}</option>'
+
+            # ルートディレクトリの *.py ファイルをリストアップ
+            py_files = [f for f in os.listdir() if f.endswith(".py")]
+            py_file_options = ""
+            for py_file in py_files:
+                selected = "selected" if py_file == default_main_module else ""
+                py_file_options += f'<option value="{py_file}" {selected}>{py_file}</option>'
+            response = self.get_root_response(ssid_options, py_file_options, default_password)
+
+            print("GET リクエスト処理終了")
+            cl.send(response)
+
+        # POSTリクエストでSSIDとパスワードを保存
+        elif "POST / " in request:
+            print("POST リクエストを処理中")
+            # リクエストボディを取得
+            headers, body = request.split("\r\n\r\n", 1)
+            print("リクエストボディ:", body)
+
+            # クエリ文字列を解析
+            params = self.parse_query_string(body)
+            ssid = params.get("ssid", "")
+            password = params.get("password", "")
+            main_module = params.get("main_module", "")
+            print("Wi-Fi設定を保存します:", ssid, password)
+            print("選択されたメインモジュール:", main_module)
+
+            # SSIDとパスワードをファイルに保存
+            with open("wifi_config.txt", "w") as f:
+                f.write(f"SSID={ssid}\n")
+                f.write(f"PASSWORD={password}\n")
+                f.write(f"MAIN_MODULE={main_module}\n")
+            print("設定を保存しました")
+
+            # 保存完了メッセージを送信
+            print("POST リクエスト処理終了")
+            machine.reset()  # デバイスを再起動
+            cl.send(self.get_redirect_response())
+
+        elif "GET /reboot" in request:
+            cl.send(self.get_redirect_response())
+            print("デバイスを再起動します...")
+            machine.reset()  # デバイスを再起動
+        elif "GET /demo1" in request:
+            print("demo1...")
+            self.demo1()
+            cl.send(self.get_redirect_response())
+        elif "GET /demo2" in request:
+            print("demo2...")
+            self.demo2()
+            cl.send(self.get_redirect_response())
+        elif "GET /demo3" in request:
+            print("demo3...")
+            self.play_melody()
+            cl.send(self.get_redirect_response())
+
+        elif "GET /oled_bitmap.bmp" in request:
+            print("OLEDビットマップを送信します")
+            self.handle_get_bitmap(cl)
+        else:
+            # その他のリクエストには404エラーを返す
+            print("404 Not Found")
+            cl.send(self.get_default_response())
+
+
+    def start_http_server(self):
         """HTTPサーバーを起動"""
-        sta = network.WLAN(network.STA_IF)
-        sta.active(True)
-        SSID = "PcratchIoT-" + self.microbit_friendly_name(sta.config('mac'))
-        print("SSID:", SSID)
-
-        ap = network.WLAN(network.AP_IF)
-        ap.active(True)
-        ap.config(essid=SSID, password=self.PASSWORD)
-
-        print("アクセスポイントを起動しました")
-        print("SSID:", SSID)
-        print("IPアドレス:", ap.ifconfig()[0])
-
+        print("HTTPサーバーを起動...")
         addr = socket.getaddrinfo("0.0.0.0", 80)[0][-1]
         s = socket.socket()
-        # s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind(addr)
         s.listen(1)
-        # s.setblocking(False)  # 非同期処理のためにノンブロッキングモードに設定
         print("HTTPサーバーが起動しました")
-        while True:
-            cl, addr = s.accept()
-            print("クライアント接続:", addr)
+
+        while self.running:
             try:
-                request = cl.recv(1024).decode("utf-8")
-                print("リクエスト:", request)
-
-                # GETリクエストでフォームを表示
-                if "GET / " in request:
-                    print("GET リクエストを処理中")
-                    # Wi-Fiネットワークをスキャン
-                    networks = sta.scan()
-                    ssid_options = ""
-                    for net in networks:
-                        ssid = net[0].decode("utf-8")
-                        selected = "selected" if ssid == default_ssid else ""
-                        ssid_options += f'<option value="{ssid}" {selected}>{ssid}</option>'
-
-                    # ルートディレクトリの *.py ファイルをリストアップ
-                    py_files = [f for f in os.listdir() if f.endswith(".py")]
-                    py_file_options = ""
-                    for py_file in py_files:
-                        selected = "selected" if py_file == default_main_module else ""
-                        py_file_options += f'<option value="{py_file}" {selected}>{py_file}</option>'
-                    response = self.get_root_response(ssid_options, py_file_options, default_password)
-
-                    cl.send(response)
-                    print("GET リクエスト処理終了")
-
-                # POSTリクエストでSSIDとパスワードを保存
-                elif "POST / " in request:
-                    print("POST リクエストを処理中")
-                    # リクエストボディを取得
-                    headers, body = request.split("\r\n\r\n", 1)
-                    print("リクエストボディ:", body)
-
-                    # クエリ文字列を解析
-                    params = self.parse_query_string(body)
-                    ssid = params.get("ssid", "")
-                    password = params.get("password", "")
-                    main_module = params.get("main_module", "")
-                    print("Wi-Fi設定を保存します:", ssid, password)
-                    print("選択されたメインモジュール:", main_module)
-
-                    # SSIDとパスワードをファイルに保存
-                    with open("wifi_config.txt", "w") as f:
-                        f.write(f"SSID={ssid}\n")
-                        f.write(f"PASSWORD={password}\n")
-                        f.write(f"MAIN_MODULE={main_module}\n")
-                    print("設定を保存しました")
-
-                    # 保存完了メッセージを送信
-                    cl.send(self.get_redirect_response())
-                    print("POST リクエスト処理終了")
-                    machine.reset()  # デバイスを再起動
-                elif "GET /reboot" in request:
-                    cl.send(self.get_redirect_response())
-                    print("デバイスを再起動します...")
-                    machine.reset()  # デバイスを再起動
-                elif "GET /demo1" in request:
-                    print("demo1...")
-                    cl.send(self.get_redirect_response())
-                    self.demo1()
-                elif "GET /demo2" in request:
-                    print("demo2...")
-                    cl.send(self.get_redirect_response())
-                    self.demo2()
-                elif "GET /demo3" in request:
-                    print("demo3...")
-                    cl.send(self.get_redirect_response())
-                    self.play_melody()
-                else:
-                    # その他のリクエストには404エラーを返す
-                    print("404 Not Found")
-                    cl.send(self.get_default_response())
+                cl, addr = s.accept()
+                print("クライアント接続:", addr)
+                try:
+                    request = cl.recv(1024).decode("utf-8")
+                    print("リクエスト:", request)
+                    self.handle_request(cl, request)  # リクエストを処理
+                except Exception as e:
+                    print("リクエスト処理中にエラー:", e)
+                finally:
+                    cl.close()  # ソケットを確実に閉じる
             except Exception as e:
                 print("エラー:", e)
-            finally:
-                cl.close()  # クライアント接続を閉じる
