@@ -3,6 +3,7 @@ import os
 import struct
 import time
 import framebuf
+import network
 from machine import Pin, I2C, ADC, PWM
 from ssd1306 import SSD1306_I2C
 from neopixel import NeoPixel
@@ -47,6 +48,54 @@ class Hardware:
             self.register_button_irq()
             self.pin_event_time = {}
             self.button_handlers = {}  # ハンドラーを登録する辞書
+
+            self.PASSWORD = "12345678"
+            self.wifi_ap = None  # Wi-Fiアクセスポイントのインスタンス
+            self.friendly_name = "" # フレンドリー名
+            self.ssid = ""  # SSID
+
+    def get_friendly_name(self, unique_id):
+        """ユニークIDからフレンドリー名を生成"""
+        length = 5
+        letters = 5
+        codebook = [
+            ['z', 'v', 'g', 'p', 't'],
+            ['u', 'o', 'i', 'e', 'a'],
+            ['z', 'v', 'g', 'p', 't'],
+            ['u', 'o', 'i', 'e', 'a'],
+            ['z', 'v', 'g', 'p', 't']
+        ]
+        name = []
+        mac_padded = b'\x00\x00' + unique_id
+        _, n = struct.unpack('>II', mac_padded)
+        ld = 1
+        d = letters
+
+        for i in range(0, length):
+            h = (n % d) // ld
+            n -= h
+            d *= letters
+            ld *= letters
+            name.insert(0, codebook[i][h])
+
+        return "".join(name)
+
+    def start_wifi(self):
+        """Wi-Fiを アクセスポイント (Access Point, AP) モードで起動"""
+        if self.wifi_ap is None:
+            self.wifi_ap = network.WLAN(network.AP_IF)
+        self.wifi_ap.active(True)   # APモードを有効化
+        self.friendly_name = self.get_friendly_name(self.wifi_ap.config('mac'))
+        self.ssid = "PcratchIoT-" + self.friendly_name
+        print("SSID:", self.ssid)
+
+    def connect_wifi(self):
+        """Wi-Fiに接続"""
+        self.wifi_ap.config(essid=self.ssid, password=self.PASSWORD)
+        print("Wi-Fi接続中...")
+        while not self.wifi_ap.isconnected():
+            time.sleep(1)
+        print("Wi-Fi接続完了:", self.wifi_ap.ifconfig())
 
     def init_oled(self):
         self.oled = None
@@ -136,12 +185,12 @@ class Hardware:
             self.oled.show()
 
     def play_tone(self, f, v = 100):
-        print(f"Tone {f}Hz {v}% ...")
+        # print(f"Tone {f}Hz {v}% ...")
         self.PWM21.freq(int(f))
         self.PWM21.duty_u16(32768)  # duty_u16を50%に設定（65535の半分）
 
     def stop_tone(self):
-        print("Tone off")
+        # print("Tone off")
         self.PWM21.duty_u16(0)    # 音を消す
 
     def human_sensor(self):
@@ -177,10 +226,10 @@ class Hardware:
         volt = ADC(3).read_u16() / 65535 * 3.3 * 3
         return volt
 
-    def get_oled_bitmap(self):
-        """OLEDのバッファを24ビットBMP形式で取得"""
+    def get_oled_bitmap_24(self):
+        """OLEDのバッファを24ビットBMP形式で取得（上下正しい）"""
         if self.oled:
-            print("get_oled_bitmap")
+            print("get_oled_bitmap_24")
             # OLEDのバッファを取得
             width, height = self.oled.width, self.oled.height
             row_size = (width * 3 + 3) // 4 * 4  # 各行のバイト数（4バイト境界に揃える）
@@ -221,11 +270,12 @@ class Hardware:
             bmp_data = bytearray(len(bmp_header) + pixel_array_size)  # 必要なサイズのバッファを確保
             bmp_data[:len(bmp_header)] = bmp_header  # ヘッダーをコピー
 
-            # ピクセルデータをバッファに書き込む
-            for y in range(height - 1, -1, -1):  # 下から上に向かってコピー
+            # ピクセルデータをバッファに書き込む（上下反転のみ）
+            for y in range(height):  # 上下反転のために通常の順序でループ
                 row_start = len(bmp_header) + y * row_size
-                for x in range(width):
-                    pixel = fb.pixel(x, y)
+                for x in range(width):  # 左右反転を削除し、通常の順序で処理
+                    flipped_y = height - 1 - y  # 上下反転
+                    pixel = fb.pixel(x, flipped_y)
                     if pixel:
                         # 白 (RGB: 255, 255, 255)
                         bmp_data[row_start + x * 3:row_start + x * 3 + 3] = b'\xFF\xFF\xFF'
@@ -236,7 +286,7 @@ class Hardware:
                 padding_start = row_start + width * 3
                 bmp_data[padding_start:padding_start + (row_size - width * 3)] = b'\x00' * (row_size - width * 3)
 
-            print("end get_oled_bitmap")
+            print("end get_oled_bitmap_24")
             return bmp_data
 
         return None

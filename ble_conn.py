@@ -6,49 +6,14 @@ import bluetooth
 import struct
 import network
 from micropython import const
-
-
-# マイクロビットのユニークIDからフレンドリー名を生成
-def microbit_friendly_name(unique_id):
-    length = 5
-    letters = 5
-    codebook = [
-        ['z', 'v', 'g', 'p', 't'],
-        ['u', 'o', 'i', 'e', 'a'],
-        ['z', 'v', 'g', 'p', 't'],
-        ['u', 'o', 'i', 'e', 'a'],
-        ['z', 'v', 'g', 'p', 't']
-    ]
-    name = []
-
-    # Derive our name from the nrf51822's unique ID
-    # _, n = struct.unpack("II", machine.unique_id())
-    mac_padded = b'\x00\x00' + unique_id # 6バイトのMACアドレスを8バイトにパディング
-    _, n = struct.unpack('>II', mac_padded)
-    ld = 1;
-    d = letters;
-
-    for i in range(0, length):
-        h = (n % d) // ld;
-        n -= h;
-        d *= letters;
-        ld *= letters;
-        name.insert(0, codebook[i][h]);
-
-    return "".join(name);
+from hardware import Hardware
 
 class BLEConnection:
     def __init__(self):
+        self.hardware = Hardware()
+        self.hardware.start_wifi()  # Wi-Fiを起動準備
         # デバイス名を設定
-        self.wlan = network.WLAN(network.STA_IF)
-        self.wlan.active(True)
-        self.mac = self.wlan.config('mac')
-        # 下位バイトをドット区切りの10進数に変換
-        # mac_str = '.'.join(str(b) for b in mac[-3:])
-        # self.NAME = f"BBC micro:bit [{mac_str}]"
-        self.riendly_name = microbit_friendly_name(self.mac)
-        self.NAME = f"PcratchIoT-{self.riendly_name}"
-        print(self.NAME)
+        print(self.hardware.ssid)
         self.connection = None  # 接続オブジェクトを初期化
         # 受信したコマンドの処理
         self.recvnum = 0
@@ -128,7 +93,7 @@ class BLEConnection:
             try:
                 async with await aioble.advertise(
                     self._ADV_INTERVAL_MS,
-                    name=self.NAME,
+                    name=self.hardware.ssid,
                     services=[self.IOT_SERVICE_UUID],
                     appearance=self._ADV_APPEARANCE_GENERIC_TAG,
                 ) as connection:

@@ -1,42 +1,15 @@
 import machine
 import network
 import socket
-import struct
 import os
 import time
-from machine import Pin, PWM
-from neopixel import NeoPixel
-import uasyncio as asyncio
-import framebuf
 from hardware import Hardware
 
 class IoTServer:
     def __init__(self):
         # アクセスポイントの設定
-        self.PASSWORD = "12345678"
         self.hardware = Hardware()
-
-        #self.speaker = PWM(Pin(21, Pin.OUT))
-        #self.speaker.freq(440)
-        #self.speaker.duty_u16(0)
-        #self.np = NeoPixel(Pin(16, Pin.OUT), 2)
-        # self.oled = None
-        # self.default_ssid = ""
-        # self.default_password = ""
-        # self.default_main_module = ""
         self.running = True  # サーバーの実行状態を管理するフラグ
-
-    def start_wifi(self):
-        """Wi-FiをSTAモードで起動"""
-        sta = network.WLAN(network.AP_IF)
-        sta.active(True)
-        SSID = "PcratchIoT-" + self.microbit_friendly_name(sta.config('mac'))
-        print("SSID:", SSID)
-        sta.config(essid=SSID, password=self.PASSWORD)
-        print("Wi-Fi接続中...")
-        while not sta.isconnected():
-            time.sleep(1)
-        print("Wi-Fi接続完了:", sta.ifconfig())
 
     def stop_server(self):
         """サーバーを停止"""
@@ -47,12 +20,9 @@ class IoTServer:
     def handle_get_bitmap(self, cl):
         """OLEDのビットマップをBMP形式でHTTPレスポンスとして送信"""
         # OLEDのビットマップデータを取得
-        bitmap = self.hardware.get_oled_bitmap()
+        bitmap = self.hardware.get_oled_bitmap_24()
         print(len(bitmap))
-
-        #with open("test.bmp", "rb") as bmp_file:
-        #    bitmap = bmp_file.read()
-
+        # ビットマップデータが取得できた場合
         if bitmap:
             # HTTPレスポンスを作成
             response = b"HTTP/1.1 200 OK\r\n" \
@@ -77,31 +47,7 @@ class IoTServer:
             except Exception as e:
                 print(f"エラー応答送信中にエラーが発生しました: {e}")
 
-    def microbit_friendly_name(self, unique_id):
-        """ユニークIDからフレンドリー名を生成"""
-        length = 5
-        letters = 5
-        codebook = [
-            ['z', 'v', 'g', 'p', 't'],
-            ['u', 'o', 'i', 'e', 'a'],
-            ['z', 'v', 'g', 'p', 't'],
-            ['u', 'o', 'i', 'e', 'a'],
-            ['z', 'v', 'g', 'p', 't']
-        ]
-        name = []
-        mac_padded = b'\x00\x00' + unique_id
-        _, n = struct.unpack('>II', mac_padded)
-        ld = 1
-        d = letters
 
-        for i in range(0, length):
-            h = (n % d) // ld
-            n -= h
-            d *= letters
-            ld *= letters
-            name.insert(0, codebook[i][h])
-
-        return "".join(name)
 
     def parse_query_string(self, query):
         """クエリ文字列を解析"""
@@ -280,13 +226,13 @@ Content-Type: text/html; charset=utf-8
     <button onclick="location.href='/demo1'">デモ1</button>
     <button onclick="location.href='/demo2'">デモ2</button>
     <button onclick="location.href='/demo3'">メロディ</button>
-
-    <img src="/oled_bitmap.bmp" alt="OLED Bitmap">
+    <p><img src="/oled_bitmap.bmp" alt="OLED Bitmap" style="width:512px; height:256px; border: 5px solid black;"></p>
 
 </body>
 </html>
 """
         return response
+
 
     def get_config(self):
         # デフォルトのSSIDとパスワードを読み込む

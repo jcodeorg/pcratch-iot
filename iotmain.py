@@ -1,10 +1,6 @@
 # ESP32C6 pcratch-IoT v1.3.4
 
 import asyncio
-import network
-from weather import Weather
-from iotclock import Clock
-import gc
 from ble_conn import BLEConnection
 from iotdevice import Device
 from hardware import Hardware
@@ -58,7 +54,7 @@ class IoTManager:
                 hardware.show_text("Connected!!")
                 self.connected_displayed = True
         else:
-            hardware.show_text(self.ble_conn.NAME[-16:])
+            hardware.show_text(hardware.ssid[-16:])
             self.connected_displayed = False
 
         # 温度、湿度を取得
@@ -86,15 +82,13 @@ import _thread
 # サーバーをバックグラウンドスレッドで実行
 def server_thread():
     server = IoTServer()
-    server.start_wifi()  # Wi-Fiを起動
+    server.hardware.start_wifi()  # Wi-Fiを起動
+    server.hardware.connect_wifi()  # Wi-Fi接続
     server.start_http_server()  # HTTPサーバーを起動
 
 async def main():
     # インスタンスの作成と使用例
     iot_manager = IoTManager()
-    #bitmap = iot_manager.hardware.get_oled_bitmap()
-    #print(len(bitmap))
-
     _thread.start_new_thread(server_thread, ())
 
     while True:

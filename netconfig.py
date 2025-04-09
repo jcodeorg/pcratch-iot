@@ -5,7 +5,8 @@ from server import IoTServer
 # サーバーをバックグラウンドスレッドで実行
 def server_thread():
     server = IoTServer()
-    server.start_wifi()  # Wi-Fiを起動
+    server.hardware.start_wifi()  # Wi-Fiを起動
+    server.hardware.connect_wifi()  # Wi-Fi接続
     server.start_http_server()  # HTTPサーバーを起動
 
 # メインスレッドで他の処理を実行
