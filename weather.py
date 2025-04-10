@@ -101,7 +101,7 @@ class Weather:
                 forecast = day['forecast']
                 mintemp = day['mintemp']
                 maxtemp = day['maxtemp']
-                print(date, forecast, mintemp, maxtemp)
+                # print(date, forecast, mintemp, maxtemp)
 
                 # "日(" を "(" に置換
                 date = date.replace("日(", "(")

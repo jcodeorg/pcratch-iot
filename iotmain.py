@@ -1,9 +1,11 @@
 # ESP32C6 pcratch-IoT v1.3.4
 
 import asyncio
+import _thread
 from ble_conn import BLEConnection
 from iotdevice import Device
 from hardware import Hardware
+from server import IoTServer  # 作成したモジュールをインポート
 
 # デフォルトのSSID、パスワード、メインモジュールを読み込む
 SSID = ""
@@ -76,14 +78,11 @@ class IoTManager:
                 self.device.send_sensor_value()
             await asyncio.sleep_ms(250)
 
-from server import IoTServer  # 作成したモジュールをインポート
-import _thread
-
 # サーバーをバックグラウンドスレッドで実行
 def server_thread():
+    hardware = Hardware()
+    hardware.wait_wifi_ap_conected()  # Wi-Fi接続
     server = IoTServer()
-    server.hardware.start_wifi()  # Wi-Fiを起動
-    server.hardware.connect_wifi()  # Wi-Fi接続
     server.start_http_server()  # HTTPサーバーを起動
 
 async def main():

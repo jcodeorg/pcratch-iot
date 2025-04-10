@@ -11,9 +11,9 @@ from hardware import Hardware
 class BLEConnection:
     def __init__(self):
         self.hardware = Hardware()
-        self.hardware.start_wifi()  # Wi-Fiを起動準備
         # デバイス名を設定
-        print(self.hardware.ssid)
+        self.ssid = self.hardware.get_wifi_ap_ssid()  # Wi-Fiを起動準備してssidを取得
+        print(self.ssid)
         self.connection = None  # 接続オブジェクトを初期化
         # 受信したコマンドの処理
         self.recvnum = 0
@@ -93,7 +93,7 @@ class BLEConnection:
             try:
                 async with await aioble.advertise(
                     self._ADV_INTERVAL_MS,
-                    name=self.hardware.ssid,
+                    name=self.ssid,
                     services=[self.IOT_SERVICE_UUID],
                     appearance=self._ADV_APPEARANCE_GENERIC_TAG,
                 ) as connection:

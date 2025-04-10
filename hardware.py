@@ -81,16 +81,19 @@ class Hardware:
 
         return "".join(name)
 
-    def start_wifi(self):
-        """Wi-Fiを アクセスポイント (Access Point, AP) モードで起動"""
+    def get_wifi_ap_ssid(self):
+        """Wi-Fiを アクセスポイント (Access Point, AP) モードで起動して ssid を返却 """
         if self.wifi_ap is None:
             self.wifi_ap = network.WLAN(network.AP_IF)
-        self.wifi_ap.active(True)   # APモードを有効化
+        if not self.wifi_ap.active():
+            self.wifi_ap.active(True)   # APモードを有効化
         self.friendly_name = self.get_friendly_name(self.wifi_ap.config('mac'))
         self.ssid = "PcratchIoT-" + self.friendly_name
         print("SSID:", self.ssid)
+        return self.ssid
 
-    def connect_wifi(self):
+    def wait_wifi_ap_conected(self):
+        self.get_wifi_ap_ssid()
         """Wi-Fiに接続"""
         self.wifi_ap.config(essid=self.ssid, password=self.PASSWORD)
         print("Wi-Fi接続中...")
@@ -241,7 +244,7 @@ class Hardware:
     def send_oled_bitmap_24(self, cl):
         """OLEDのバッファを24ビットBMP形式で送信（上下正しい）"""
         if self.oled:
-            # print("send_oled_bitmap_24")
+            print("send_oled_bitmap_24")
             # OLEDのバッファを取得
             width, height = self.oled.width, self.oled.height
             row_size = (width * 3 + 3) // 4 * 4  # 各行のバイト数（4バイト境界に揃える）
@@ -304,4 +307,4 @@ class Hardware:
                 # 行データを送信
                 cl.send(row_data)
 
-            # print("end send_oled_bitmap_24")
+            print("end send_oled_bitmap_24")

@@ -3,12 +3,16 @@
 
 import asyncio
 import network
+import _thread
 from weather import Weather
 from iotclock import Clock
 from machine import Pin, I2C, ADC, PWM
 from ssd1306 import SSD1306_I2C
 from neopixel import NeoPixel
 from ahtx0 import AHT20
+import gc
+from hardware import Hardware
+from server import IoTServer  # 作成したモジュールをインポート
 
 # OLEDの初期化
 i2c = I2C(0, scl=Pin(23), sda=Pin(22))
@@ -95,4 +99,12 @@ def print_memory_usage():
     print("Allocated memory: {} bytes".format(allocated_memory))
     print("Total memory: {} bytes".format(total_memory))
 
+# サーバーをバックグラウンドスレッドで実行
+def server_thread():
+    hardware = Hardware()
+    hardware.wait_wifi_ap_conected()  # Wi-Fi接続
+    server = IoTServer()
+    server.start_http_server()  # HTTPサーバーを起動
+
+_thread.start_new_thread(server_thread, ())
 asyncio.run(main())
