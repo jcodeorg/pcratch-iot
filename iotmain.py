@@ -65,8 +65,8 @@ class IoTManager:
             hardware.oled.fill_rect(0, 10, hardware.oled.width, hardware.oled.height - 10, 0)
             hardware.oled.text("Temp: {:.1f}C".format(temperature), 0, 10)
             hardware.oled.text("Humi: {:.1f}%".format(humidity), 0, 20)
-            hardware.oled.text("l{:5.1f}".format(hardware.lux()), 72, 30)
-            hardware.oled.text("H{:5d}".format(hardware.human_sensor()), 72, 40)
+            hardware.oled.text("Ligh: {:.1f}".format(hardware.lux()/500*100), 0, 30)   # 照度センサーの値
+            hardware.oled.text("HS  : {:.1f}".format(hardware.human_sensor()), 0, 40)
             hardware.oled.show()
 
     # センサーの値を 250ms 毎に送信

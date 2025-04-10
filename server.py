@@ -10,44 +10,13 @@ class IoTServer:
         # アクセスポイントの設定
         self.hardware = Hardware()
         self.running = True  # サーバーの実行状態を管理するフラグ
+        self.wifi_confifg = ()
+        self.networks = []  # Wi-Fiネットワークのリストを初期化
 
     def stop_server(self):
         """サーバーを停止"""
         self.running = False
         print("サーバーを停止します")
-
-    
-    def handle_get_bitmap(self, cl):
-        """OLEDのビットマップをBMP形式でHTTPレスポンスとして送信"""
-        # OLEDのビットマップデータを取得
-        bitmap = self.hardware.get_oled_bitmap_24()
-        print(len(bitmap))
-        # ビットマップデータが取得できた場合
-        if bitmap:
-            # HTTPレスポンスを作成
-            response = b"HTTP/1.1 200 OK\r\n" \
-                    b"Content-Type: image/bmp\r\n" \
-                    b"Content-Disposition: inline; filename=\"oled_bitmap.bmp\"\r\n" \
-                    b"\r\n"
-
-            # クライアントにレスポンスを送信
-            try:
-                cl.send(response)
-                cl.send(bitmap)
-                print("ビットマップデータを送信しました")
-            except Exception as e:
-                print(f"ビットマップ送信中にエラーが発生しました: {e}")
-        else:
-            # エラー応答
-            response = b"HTTP/1.1 500 Internal Server Error\r\n" \
-                    b"Content-Type: text/plain\r\n\r\n" \
-                    b"OLEDが初期化されていません"
-            try:
-                cl.send(response)
-            except Exception as e:
-                print(f"エラー応答送信中にエラーが発生しました: {e}")
-
-
 
     def parse_query_string(self, query):
         """クエリ文字列を解析"""
@@ -252,41 +221,39 @@ Content-Type: text/html; charset=utf-8
             print("wifi_config.txt ファイルが見つかりません。デフォルト値を使用します。")
         return default_ssid, default_password, default_main_module
 
-    def handle_request(self, cl, request):
-        # GETリクエストでフォームを表示
-        if "GET / " in request:
-            print("GET リクエストを処理中")
+    def get_wifi_config(self):
             """Configを読み込む"""
-            default_ssid, default_password, default_main_module = self.get_config()
+            self.wifi_confifg = (self.get_config())
+            default_ssid, default_password, default_main_module = self.wifi_confifg
             print("デフォルトSSID:", default_ssid)
             print("デフォルトパスワード:", default_password)
             print("デフォルトメインモジュール:", default_main_module)
-
-            sta = network.WLAN(network.STA_IF)  # STAモードのインスタンスを作成
-            if not sta.active():
-                print("STAモードを有効化します...")
-                sta.active(True)  # STAモードを有効化
-            else:
-                print("STAモードは既に有効です")
-
             # Wi-Fiネットワークをスキャン
-            networks = sta.scan()
+            self.networks = self.hardware.scan_wifi()
+            # ルートディレクトリの *.py ファイルをリストアップ
+            self.py_files = [f for f in os.listdir() if f.endswith(".py")]
+
+    def handle_request(self, cl, request):
+        # GETリクエストでフォームを表示
+        if "GET / " in request:
+            print("GET リクエスト処理...")
+            default_ssid, default_password, default_main_module = self.wifi_confifg
+            # Wi-Fiネットワークをスキャン
             ssid_options = ""
-            for net in networks:
+            for net in self.networks:
                 ssid = net[0].decode("utf-8")
                 selected = "selected" if ssid == default_ssid else ""
                 ssid_options += f'<option value="{ssid}" {selected}>{ssid}</option>'
 
-            # ルートディレクトリの *.py ファイルをリストアップ
-            py_files = [f for f in os.listdir() if f.endswith(".py")]
             py_file_options = ""
-            for py_file in py_files:
+            for py_file in self.py_files:
                 selected = "selected" if py_file == default_main_module else ""
                 py_file_options += f'<option value="{py_file}" {selected}>{py_file}</option>'
             response = self.get_root_response(ssid_options, py_file_options, default_password)
 
-            print("GET リクエスト処理終了")
+            print("GET レスポンス送信...")
             cl.send(response)
+            print("GET レスポンス送信終了")
 
         # POSTリクエストでSSIDとパスワードを保存
         elif "POST / " in request:
@@ -334,7 +301,8 @@ Content-Type: text/html; charset=utf-8
 
         elif "GET /oled_bitmap.bmp" in request:
             print("OLEDビットマップを送信します")
-            self.handle_get_bitmap(cl)
+            self.hardware.send_oled_bitmap_24(cl)
+
         else:
             # その他のリクエストには404エラーを返す
             print("404 Not Found")
@@ -351,6 +319,7 @@ Content-Type: text/html; charset=utf-8
         s.listen(1)
         print("HTTPサーバーが起動しました")
 
+        self.get_wifi_config()  # 表示情報を取得
         while self.running:
             try:
                 cl, addr = s.accept()

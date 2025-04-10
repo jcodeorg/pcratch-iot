@@ -53,6 +53,7 @@ class Hardware:
             self.wifi_ap = None  # Wi-Fiアクセスポイントのインスタンス
             self.friendly_name = "" # フレンドリー名
             self.ssid = ""  # SSID
+            self.wifi_sta = None  # Wi-Fiステーションのインスタンス（インターネット接続）
 
     def get_friendly_name(self, unique_id):
         """ユニークIDからフレンドリー名を生成"""
@@ -96,6 +97,15 @@ class Hardware:
         while not self.wifi_ap.isconnected():
             time.sleep(1)
         print("Wi-Fi接続完了:", self.wifi_ap.ifconfig())
+
+    # Wi-Fiネットワークをスキャン
+    def scan_wifi(self):
+        if self.wifi_sta is None:
+            self.wifi_sta = network.WLAN(network.STA_IF)
+        if not self.wifi_sta.active():
+            self.wifi_sta.active(True)
+        networks = self.wifi_sta.scan()
+        return networks
 
     def init_oled(self):
         self.oled = None
@@ -175,6 +185,8 @@ class Hardware:
             self.oled.fill_rect(0, 0, self.oled.width, 10, 0)
             self.oled.text(s, 0, 0)
             self.oled.show()
+        else:
+            print("OLED not initialized", s)
 
     def draw_icon(self, icon, x, y):
         if self.oled:
@@ -226,10 +238,10 @@ class Hardware:
         volt = ADC(3).read_u16() / 65535 * 3.3 * 3
         return volt
 
-    def get_oled_bitmap_24(self):
-        """OLEDのバッファを24ビットBMP形式で取得（上下正しい）"""
+    def send_oled_bitmap_24(self, cl):
+        """OLEDのバッファを24ビットBMP形式で送信（上下正しい）"""
         if self.oled:
-            print("get_oled_bitmap_24")
+            # print("send_oled_bitmap_24")
             # OLEDのバッファを取得
             width, height = self.oled.width, self.oled.height
             row_size = (width * 3 + 3) // 4 * 4  # 各行のバイト数（4バイト境界に揃える）
@@ -256,6 +268,15 @@ class Hardware:
                 0x00, 0x00, 0x00, 0x00   # 重要色数 (0 = 全色)
             ])
 
+            # HTTPレスポンスヘッダーを送信
+            cl.send(b"HTTP/1.1 200 OK\r\n")
+            cl.send(b"Content-Type: image/bmp\r\n")
+            cl.send(b"Content-Disposition: inline; filename=\"oled_bitmap.bmp\"\r\n")
+            cl.send(b"\r\n")
+
+            # BMPヘッダーを送信
+            cl.send(bmp_header)
+
             # OLEDのピクセルデータを取得
             buffer = bytearray(width * height)  # バッファを作成
             fb = framebuf.FrameBuffer(buffer, width, height, framebuf.MONO_HLSB)
@@ -266,27 +287,21 @@ class Hardware:
                     if self.oled.pixel(x, y):
                         fb.pixel(x, y, 1)
 
-            # ピクセルデータを作成
-            bmp_data = bytearray(len(bmp_header) + pixel_array_size)  # 必要なサイズのバッファを確保
-            bmp_data[:len(bmp_header)] = bmp_header  # ヘッダーをコピー
-
-            # ピクセルデータをバッファに書き込む（上下反転のみ）
+            # ピクセルデータを行ごとに送信
             for y in range(height):  # 上下反転のために通常の順序でループ
-                row_start = len(bmp_header) + y * row_size
-                for x in range(width):  # 左右反転を削除し、通常の順序で処理
+                row_data = bytearray(row_size)  # 行データを格納するバッファ
+                for x in range(width):
                     flipped_y = height - 1 - y  # 上下反転
                     pixel = fb.pixel(x, flipped_y)
                     if pixel:
                         # 白 (RGB: 255, 255, 255)
-                        bmp_data[row_start + x * 3:row_start + x * 3 + 3] = b'\xFF\xFF\xFF'
+                        row_data[x * 3:x * 3 + 3] = b'\xFF\xFF\xFF'
                     else:
                         # 黒 (RGB: 0, 0, 0)
-                        bmp_data[row_start + x * 3:row_start + x * 3 + 3] = b'\x00\x00\x00'
+                        row_data[x * 3:x * 3 + 3] = b'\x00\x00\x00'
                 # パディングを追加（4バイト境界に揃える）
-                padding_start = row_start + width * 3
-                bmp_data[padding_start:padding_start + (row_size - width * 3)] = b'\x00' * (row_size - width * 3)
+                row_data[width * 3:] = b'\x00' * (row_size - width * 3)
+                # 行データを送信
+                cl.send(row_data)
 
-            print("end get_oled_bitmap_24")
-            return bmp_data
-
-        return None
+            # print("end send_oled_bitmap_24")
