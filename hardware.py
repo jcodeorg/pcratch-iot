@@ -177,6 +177,7 @@ class Hardware:
 
     # print(f"ピン {pin} に {n} を出力")
     def digital_out(self, pin, n):
+        # print("digital_out", pin, n)
         if pin == 19:
             pwm = self.PWM19
         elif pin == 20:
@@ -190,13 +191,15 @@ class Hardware:
 
     # print(f"ピン {pin} をアナログ出力 {n} %にする")
     def analog_out(self, pin, n):
+        # print("analog_out", pin, n)
         if pin == 19:
             pwm = self.PWM19
         elif pin == 20:
             pwm = self.PWM20
         else:
             return
-        duty = int(65535 * n / 100)
+        duty = int(65535 * n / 1024)
+        # print("analog_out", pin, duty)
         pwm.duty_u16(duty)
 
     def show_text(self, s, t=0):
