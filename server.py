@@ -203,27 +203,10 @@ Content-Type: text/html; charset=utf-8
         return response
 
 
-    def get_config(self):
-        # デフォルトのSSIDとパスワードを読み込む
-        default_ssid = ""
-        default_password = ""
-        default_main_module = ""
-        try:
-            with open("wifi_config.txt", "r") as f:
-                for line in f:
-                    if line.startswith("SSID="):
-                        default_ssid = line.strip().split("=", 1)[1]
-                    elif line.startswith("PASSWORD="):
-                        default_password = line.strip().split("=", 1)[1]
-                    elif line.startswith("MAIN_MODULE="):
-                        default_main_module = line.strip().split("=", 1)[1]
-        except FileNotFoundError:
-            print("wifi_config.txt ファイルが見つかりません。デフォルト値を使用します。")
-        return default_ssid, default_password, default_main_module
 
     def get_wifi_config(self):
             """Configを読み込む"""
-            self.wifi_confifg = (self.get_config())
+            self.wifi_confifg = (self.hardware.get_wifi_config())
             default_ssid, default_password, default_main_module = self.wifi_confifg
             print("デフォルトSSID:", default_ssid)
             print("デフォルトパスワード:", default_password)
@@ -326,7 +309,7 @@ Content-Type: text/html; charset=utf-8
                 print("クライアント接続:", addr)
                 try:
                     request = cl.recv(1024).decode("utf-8")
-                    print("リクエスト:", request)
+                    # print("リクエスト:", request)
                     self.handle_request(cl, request)  # リクエストを処理
                 except Exception as e:
                     print("リクエスト処理中にエラー:", e)

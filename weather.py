@@ -78,6 +78,7 @@ class Weather:
             data = response.content.decode('utf-8')  # コンテンツをUTF-8でデコード
             json_data = json.loads(data)  # デコードされたデータをJSONとしてパース
             self.weather_data = json_data[self.location]
+            print(f"天気情報を取得しました.")
         except Exception as e:
             print(f"天気情報の取得中にエラーが発生しました: {e}")
 

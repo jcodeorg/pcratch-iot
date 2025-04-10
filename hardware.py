@@ -110,6 +110,24 @@ class Hardware:
         networks = self.wifi_sta.scan()
         return networks
 
+    def get_wifi_config(self):
+        # デフォルトのSSIDとパスワードを読み込む
+        default_ssid = ""
+        default_password = ""
+        default_main_module = ""
+        try:
+            with open("wifi_config.txt", "r") as f:
+                for line in f:
+                    if line.startswith("SSID="):
+                        default_ssid = line.strip().split("=", 1)[1]
+                    elif line.startswith("PASSWORD="):
+                        default_password = line.strip().split("=", 1)[1]
+                    elif line.startswith("MAIN_MODULE="):
+                        default_main_module = line.strip().split("=", 1)[1]
+        except FileNotFoundError:
+            print("wifi_config.txt ファイルが見つかりません。デフォルト値を使用します。")
+        return default_ssid, default_password, default_main_module
+
     def init_oled(self):
         self.oled = None
         try:

@@ -1,9 +1,11 @@
 # ESP32C6 pcratch-IoT v1.3.4
 # 天気予報のデモ
 
+import time
 import asyncio
 import network
 import _thread
+
 from weather import Weather
 from iotclock import Clock
 from machine import Pin, I2C, ADC, PWM
@@ -14,49 +16,16 @@ import gc
 from hardware import Hardware
 from server import IoTServer  # 作成したモジュールをインポート
 
-# OLEDの初期化
-i2c = I2C(0, scl=Pin(23), sda=Pin(22))
-oled = SSD1306_I2C(128, 64, i2c)
-def oled_print(text):
-    oled.fill(0)
-    oled.text(text, 0, 32)
-    oled.show()
-
-# AHT20の初期化
-aht20 = AHT20(i2c)
-# NeoPixelの初期化
-np = NeoPixel(Pin(16, Pin.OUT), 2)
-np[0] = (0,0,0)
-np[1] = (0,0,0)
-np.write()
-
-# デフォルトのSSID、パスワード、メインモジュールを読み込む
-default_ssid = ""
-default_password = ""
-default_main_module = ""
-try:
-    with open("wifi_config.txt", "r") as f:
-        for line in f:
-            if line.startswith("SSID="):
-                default_ssid = line.strip().split("=", 1)[1]
-            elif line.startswith("PASSWORD="):
-                default_password = line.strip().split("=", 1)[1]
-            elif line.startswith("MAIN_MODULE="):
-                default_main_module = line.strip().split("=", 1)[1]
-except:
-    print("wifi_config.txt ファイルが見つかりません。デフォルト値を使用します。")
-print("デフォルトSSID:", default_ssid)
-print("デフォルトパスワード:", default_password)
-print("デフォルトメインモジュール:", default_main_module)
-
-oled.fill(0)
-oled.text(default_ssid, 0, 10)
-oled.text(default_password, 0, 20)
-oled.text(default_main_module, 0, 30)
-oled.show()
-
 # main関数
 async def main():
+    hardware = Hardware()
+    default_ssid, default_password, default_main_module = hardware.get_wifi_config()
+    hardware.oled.fill(0)
+    hardware.oled.text(default_ssid, 0, 10)
+    hardware.oled.text(default_password, 0, 20)
+    hardware.oled.text(default_main_module, 0, 30)
+    hardware.oled.show()
+
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
     try:
@@ -66,8 +35,8 @@ async def main():
             await asyncio.sleep(1)
         print('WiFi connected:', wlan.ifconfig())
 
-        weather = Weather(oled)
-        iotclock = Clock(oled)
+        weather = Weather(hardware.oled)
+        iotclock = Clock(hardware.oled)
         print('時計合わせ...')
         await iotclock.get_ntptime()
         print('天気予報取得...')
@@ -76,13 +45,13 @@ async def main():
 
         while True:
             for _ in range(10):
-                temperature = aht20.temperature
-                humidity = aht20.relative_humidity
+                temperature = hardware.aht20.temperature
+                humidity = hardware.aht20.relative_humidity
                 iotclock.display_time(temperature, humidity)
                 await asyncio.sleep(1)
             for _ in range(10):
-                temperature = aht20.temperature
-                humidity = aht20.relative_humidity
+                temperature = hardware.aht20.temperature
+                humidity = hardware.aht20.relative_humidity
                 weather.display_weather(temperature, humidity)
                 await asyncio.sleep(1)
     except OSError as e:
@@ -101,10 +70,12 @@ def print_memory_usage():
 
 # サーバーをバックグラウンドスレッドで実行
 def server_thread():
+    time.sleep(10)  # スレッドの初期化を待つ
     hardware = Hardware()
     hardware.wait_wifi_ap_conected()  # Wi-Fi接続
     server = IoTServer()
     server.start_http_server()  # HTTPサーバーを起動
 
-_thread.start_new_thread(server_thread, ())
-asyncio.run(main())
+if __name__ == "__main__":
+    _thread.start_new_thread(server_thread, ())
+    asyncio.run(main())
