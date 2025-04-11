@@ -55,4 +55,4 @@ else:
             print(f"エラー: {default_main_module} モジュールが見つかりません。")
     else:
         print("iotmain.py を起動します。")
-        import iotmain as main
+        import main1 as main
