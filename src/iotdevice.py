@@ -1,4 +1,4 @@
-# ESP32C6 pcratch-IoT v1.4.0
+# ESP32C6 pcratch-IoT v1.4.2
 import os
 import struct
 import time

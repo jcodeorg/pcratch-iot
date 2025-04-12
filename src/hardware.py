@@ -1,4 +1,4 @@
-# ESP32C6 pcratch-IoT v1.4.1
+# ESP32C6 pcratch-IoT v1.4.2
 import struct
 import framebuf
 import network
@@ -35,6 +35,7 @@ class Hardware:
             self.adc2.atten(ADC.ATTN_11DB)
             self.adc2.width(ADC.WIDTH_12BIT)
             self.i2c = I2C(0, scl=Pin(23), sda=Pin(22))
+            self.PIN15 = Pin(15, Pin.OUT)    # USER LED
             self.PIN16 = NeoPixel(Pin(16, Pin.OUT), 2)
             self.PIN17 = Pin(17, Pin.IN, Pin.PULL_DOWN)
             self.PIN18 = Pin(18, Pin.IN, Pin.PULL_DOWN)
@@ -189,6 +190,8 @@ class Hardware:
             pwm = self.PWM19
         elif pin == 20:
             pwm = self.PWM20
+        elif pin == 15:
+            self.PIN15.value(n)
         else:
             return
         if n == 0:
