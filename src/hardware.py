@@ -131,8 +131,8 @@ class Hardware:
                         default_password = line.strip().split("=", 1)[1]
                     elif line.startswith("MAIN_MODULE="):
                         default_main_module = line.strip().split("=", 1)[1]
-        except FileNotFoundError:
-            print("wifi_config.txt ファイルが見つかりません。デフォルト値を使用します。")
+        except Exception as e:
+            print(f"wifi_config.txt 読み込みエラー: {e}")
         return default_ssid, default_password, default_main_module
 
     def init_oled(self):
@@ -184,34 +184,23 @@ class Hardware:
 
     # print(f"ピン {pin} に {n} を出力")
     def digital_out(self, pin, n):
-        # print("digital_out", pin, n)
+        duty = 0 if n == 0 else 65535
         if pin == 19:
-            pwm = self.PWM19
+            self.PWM19.duty_u16(duty)
         elif pin == 20:
-            pwm = self.PWM20
+            self.PWM20.duty_u16(duty)
         elif pin == 15:
             self.PIN15.value(n)
-        else:
-            return
-        if n == 0:
-            pwm.duty_u16(0)
-        else:
-            pwm.duty_u16(65535)
 
     # print(f"ピン {pin} をアナログ出力 {n} %にする")
     def analog_out(self, pin, n):
-        # print("analog_out", pin, n)
+        duty = int(65535 * n / 1024)
         if pin == 19:
-            pwm = self.PWM19
+            self.PWM19.duty_u16(duty)
         elif pin == 20:
-            pwm = self.PWM20
+            self.PWM20.duty_u16(duty)
         elif pin == 15:
             self.PIN15.value(1 if n != 0 else 0)
-        else:
-            return
-        duty = int(65535 * n / 1024)
-        # print("analog_out", pin, duty)
-        pwm.duty_u16(duty)
 
     def show_text(self, s, t=0):
         # print(f"文字 {s} を {t} ミリ秒間隔で流す")
