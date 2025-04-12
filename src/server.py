@@ -163,17 +163,20 @@ Content-Type: text/html; charset=utf-8
     <title>Wi-Fi設定</title>
     <style>
         body {{
-            font-size: 20px; /* フォントサイズを大きく設定 */
+            font-size: 36px; /* フォントサイズを大きく設定 */
+        }}
+        select {{
+            font-size: 36px;  /* <select> のフォントサイズ */
         }}
         h1 {{
-            font-size: 24px; /* 見出しのフォントサイズをさらに大きく設定 */
+            font-size: 48px; /* 見出しのフォントサイズをさらに大きく設定 */
         }}
         label, select, input {{
             font-size: 18px; /* ラベルや入力欄のフォントサイズを調整 */
         }}
-        button {{
+        input, button {{
             font-size: 36px; /* ボタンのフォントサイズを調整 */
-            margin: 40px; /* ボタン間の余白を設定 */
+            margin: 20px 40px; /* ボタン間の余白を設定 */
         }}
     </style>
 </head>
@@ -190,13 +193,13 @@ Content-Type: text/html; charset=utf-8
         <select id="main_module" name="main_module">
             {py_file_options}
         </select><br><br>
-        <input type="submit" value="決定">
+        <input type="submit" value="設定変更">
+        <button type="button" onclick="location.href='/scan'">WiFiスキャン</button>
     </form>
     <button onclick="location.href='/demo1'">デモ1</button>
     <button onclick="location.href='/demo2'">デモ2</button>
     <button onclick="location.href='/demo3'">メロディ</button>
-    <p><img src="/oled_bitmap.bmp" alt="OLED Bitmap" style="width:512px; height:256px; border: 5px solid black;"></p>
-
+    <p><img src="/oled_bitmap.bmp" alt="OLED Bitmap" style="width: 100%; height: auto; border: 5px solid black;"></p>
 </body>
 </html>
 """
@@ -213,6 +216,7 @@ Content-Type: text/html; charset=utf-8
             print("デフォルトメインモジュール:", default_main_module)
             # Wi-Fiネットワークをスキャン
             self.networks = self.hardware.scan_wifi()
+            print("スキャンしたWi-Fiネットワーク:", self.networks)
             # ルートディレクトリの *.py ファイルをリストアップ
             self.py_files = [f for f in os.listdir() if f.endswith(".py")]
 
@@ -269,6 +273,12 @@ Content-Type: text/html; charset=utf-8
             cl.send(self.get_redirect_response())
             print("デバイスを再起動します...")
             machine.reset()  # デバイスを再起動
+
+        elif "GET /scan" in request:
+            print("Wi-Fiスキャンを開始します...")
+            self.get_wifi_config()
+            cl.send(self.get_redirect_response())
+
         elif "GET /demo1" in request:
             print("demo1...")
             self.demo1()
@@ -283,7 +293,7 @@ Content-Type: text/html; charset=utf-8
             cl.send(self.get_redirect_response())
 
         elif "GET /oled_bitmap.bmp" in request:
-            print("OLEDビットマップを送信します")
+            # print("OLEDビットマップを送信します")
             self.hardware.send_oled_bitmap_24(cl)
 
         else:

@@ -22,6 +22,7 @@ class Hardware:
             self.initialized = True
             print("Initializing hardware...")
             # ESP32C6 Pin layout
+            #                     GPIO15: USER LED
             # GPIO0 :A0 :         5V
             # GPIO1 :A1 :         GND
             # GPIO2 :A2 :         3V3
@@ -54,6 +55,10 @@ class Hardware:
             self.friendly_name = "" # フレンドリー名
             self.ssid = ""  # SSID
             self.wifi_sta = None  # Wi-Fiステーションのインスタンス（インターネット接続）
+
+            self.PIN15 = Pin(15, Pin.OUT)    # create output pin on GPIO0
+            # p1 = Pin(3, Pin.OUT)    # create output pin on GPIO0
+            # p1.value(1)
 
     def get_friendly_name(self, unique_id):
         """ユニークIDからフレンドリー名を生成"""
@@ -101,17 +106,24 @@ class Hardware:
             time.sleep(1)
         print("Wi-Fi接続完了:", self.wifi_ap.ifconfig())
 
-    # Wi-Fiネットワークをスキャン
-    def scan_wifi(self):
+    def wifi_sta_active(self):
+        """Wi-Fiを ステーション (Station) モードで起動 """
         if self.wifi_sta is None:
             self.wifi_sta = network.WLAN(network.STA_IF)
         if not self.wifi_sta.active():
             self.wifi_sta.active(True)
+        return self.wifi_sta
+
+    def scan_wifi(self):
+        """Wi-Fiネットワークをスキャン"""
+        sta = self.wifi_sta_active()
+        print("Wi-Fiモジュールがアクティブ:", sta.active())
         networks = self.wifi_sta.scan()
+        print("スキャン結果:", networks)
         return networks
 
     def get_wifi_config(self):
-        # デフォルトのSSIDとパスワードを読み込む
+        """デフォルトのSSIDとパスワードを読み込む"""
         default_ssid = ""
         default_password = ""
         default_main_module = ""
