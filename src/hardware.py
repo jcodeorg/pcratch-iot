@@ -1,4 +1,4 @@
-# ESP32C6 pcratch-IoT v1.4.0
+# ESP32C6 pcratch-IoT v1.4.1
 import struct
 import framebuf
 import network
@@ -104,10 +104,15 @@ class Hardware:
         self.wifi_ap.config(essid=self.ssid, password=self.PASSWORD)
         return self.wifi_ap
 
-    def wifi_sta_active(self):
-        """Wi-Fiを ステーション (Station) モードで起動 """
+    def get_wifi_sta(self):
+        """Wi-Fiステーションのインスタンスを返す"""
         if self.wifi_sta is None:
             self.wifi_sta = network.WLAN(network.STA_IF)
+        return self.wifi_sta
+
+    def wifi_sta_active(self):
+        """Wi-Fiを ステーション (Station) モードで起動 """
+        self.get_wifi_sta()
         if not self.wifi_sta.active():
             self.wifi_sta.active(True)
         return self.wifi_sta

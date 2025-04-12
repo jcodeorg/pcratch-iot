@@ -1,8 +1,8 @@
-# ESP32C6 pcratch-IoT v1.4.0
-import machine
+# ESP32C6 pcratch-IoT v1.4.1
 import socket
 import os
 import time
+import machine
 from hardware import Hardware
 
 class IoTServer:
@@ -203,7 +203,7 @@ Content-Type: text/html; charset=utf-8
 
     def scan_wifi_networks(self):
             # Wi-Fiネットワークをスキャン
-            sta = self.hardware.wifi_sta
+            sta = self.hardware.get_wifi_sta()
             sta.active(False)
             time.sleep(1)
             sta.active(True)
