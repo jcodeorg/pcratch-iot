@@ -7,3 +7,12 @@ Pcratch IoT デバイスのデバイス側のPythonコードです。
 - 設定：スマホ等から、起動アプリとWiFi設定を変更でるモードです。
 - デモ：時計と温度計のデモアプリ
 
+
+python -m venv myenv
+
+cd src
+..\myenv\Scripts\activate
+# ファイルのコピー
+mpremote cp -r ./ :
+# REPL
+mpremote repl
