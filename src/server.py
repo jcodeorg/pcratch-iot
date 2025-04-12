@@ -1,5 +1,4 @@
 import machine
-import network
 import socket
 import os
 import time
@@ -205,8 +204,6 @@ Content-Type: text/html; charset=utf-8
 """
         return response
 
-
-
     def get_wifi_config(self):
             """Configを読み込む"""
             self.wifi_confifg = (self.hardware.get_wifi_config())
@@ -214,11 +211,15 @@ Content-Type: text/html; charset=utf-8
             print("デフォルトSSID:", default_ssid)
             print("デフォルトパスワード:", default_password)
             print("デフォルトメインモジュール:", default_main_module)
-            # Wi-Fiネットワークをスキャン
-            self.networks = self.hardware.scan_wifi()
-            print("スキャンしたWi-Fiネットワーク:", self.networks)
             # ルートディレクトリの *.py ファイルをリストアップ
             self.py_files = [f for f in os.listdir() if f.endswith(".py")]
+            # Wi-Fiネットワークをスキャン
+            sta = self.hardware.wifi_sta
+            sta.active(False)
+            time.sleep(1)
+            sta.active(True)
+            self.networks = sta.scan()
+            print("スキャンしたWi-Fiネットワーク:", self.networks)
 
     def handle_request(self, cl, request):
         # GETリクエストでフォームを表示
@@ -265,11 +266,6 @@ Content-Type: text/html; charset=utf-8
             print("設定を保存しました")
 
             # 保存完了メッセージを送信
-            print("POST リクエスト処理終了")
-            machine.reset()  # デバイスを再起動
-            cl.send(self.get_redirect_response())
-
-        elif "GET /reboot" in request:
             cl.send(self.get_redirect_response())
             print("デバイスを再起動します...")
             machine.reset()  # デバイスを再起動
@@ -304,6 +300,12 @@ Content-Type: text/html; charset=utf-8
 
     def start_http_server(self):
         """HTTPサーバーを起動"""
+        print("アクセスポイントを起動...")
+        ap = self.hardware.wifi_ap_conect()  # Wi-Fi接続
+        while not ap.isconnected():
+            time.sleep(1)
+        print("アクセスポイント接続完了:", ap.ifconfig())
+
         print("HTTPサーバーを起動...")
         addr = socket.getaddrinfo("0.0.0.0", 80)[0][-1]
         s = socket.socket()

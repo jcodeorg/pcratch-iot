@@ -1,5 +1,4 @@
 # ESP32C6 pcratch-IoT(micro:bit) v1.2.5
-import os
 import struct
 import time
 import framebuf
@@ -52,8 +51,7 @@ class Hardware:
 
             self.PASSWORD = "12345678"
             self.wifi_ap = None  # Wi-Fiアクセスポイントのインスタンス
-            self.friendly_name = "" # フレンドリー名
-            self.ssid = ""  # SSID
+            self.ssid = None  # SSID
             self.wifi_sta = None  # Wi-Fiステーションのインスタンス（インターネット接続）
 
             self.PIN15 = Pin(15, Pin.OUT)    # create output pin on GPIO0
@@ -86,25 +84,26 @@ class Hardware:
 
         return "".join(name)
 
-    def get_wifi_ap_ssid(self):
-        """Wi-Fiを アクセスポイント (Access Point, AP) モードで起動して ssid を返却 """
+    def wifi_ap_active(self):
         if self.wifi_ap is None:
             self.wifi_ap = network.WLAN(network.AP_IF)
         if not self.wifi_ap.active():
             self.wifi_ap.active(True)   # APモードを有効化
-        self.friendly_name = self.get_friendly_name(self.wifi_ap.config('mac'))
-        self.ssid = "PcratchIoT-" + self.friendly_name
+        return self.wifi_ap
+
+    def get_wifi_ap_ssid(self):
+        """ ssid を返却 """
+        self.wifi_ap_active()
+        if self.ssid is None:
+            self.ssid = "PcratchIoT-" + self.get_friendly_name(self.wifi_ap.config('mac'))
         print("SSID:", self.ssid)
         return self.ssid
 
-    def wait_wifi_ap_conected(self):
-        self.get_wifi_ap_ssid()
+    def wifi_ap_conect(self):
         """Wi-Fiに接続"""
+        self.get_wifi_ap_ssid()
         self.wifi_ap.config(essid=self.ssid, password=self.PASSWORD)
-        print("Wi-Fi接続中...")
-        while not self.wifi_ap.isconnected():
-            time.sleep(1)
-        print("Wi-Fi接続完了:", self.wifi_ap.ifconfig())
+        return self.wifi_ap
 
     def wifi_sta_active(self):
         """Wi-Fiを ステーション (Station) モードで起動 """
@@ -113,14 +112,6 @@ class Hardware:
         if not self.wifi_sta.active():
             self.wifi_sta.active(True)
         return self.wifi_sta
-
-    def scan_wifi(self):
-        """Wi-Fiネットワークをスキャン"""
-        sta = self.wifi_sta_active()
-        print("Wi-Fiモジュールがアクティブ:", sta.active())
-        networks = self.wifi_sta.scan()
-        print("スキャン結果:", networks)
-        return networks
 
     def get_wifi_config(self):
         """デフォルトのSSIDとパスワードを読み込む"""

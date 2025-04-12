@@ -80,8 +80,6 @@ class IoTManager:
 
 # サーバーをバックグラウンドスレッドで実行
 def server_thread():
-    hardware = Hardware()
-    hardware.wait_wifi_ap_conected()  # Wi-Fi接続
     server = IoTServer()
     server.start_http_server()  # HTTPサーバーを起動
 
