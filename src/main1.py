@@ -1,4 +1,4 @@
-# ESP32C6 pcratch-IoT v1.4.0
+# ESP32C6 pcratch-IoT v1.4.3
 import asyncio
 import _thread
 from ble_conn import BLEConnection
@@ -48,21 +48,19 @@ class IoTManager:
 
     # センサーの値をOLEDに表示
     def disp_sensor_value(self):
-        # print("disp_sensor_value")
-        hardware = self.hardware
-        if self.ble_conn.connection:
-            if not self.connected_displayed:
-                hardware.show_text("Connected!!")
-                self.connected_displayed = True
-        else:
-            hardware.show_text(hardware.ssid[-16:])
-            self.connected_displayed = False
+        if self.hardware.oled:
+            if self.ble_conn.connection:
+                if not self.connected_displayed:
+                    self.hardware.show_text("Connected!!")
+                    self.connected_displayed = True
+            else:
+                self.hardware.show_text(self.hardware.ssid[-16:])
+                self.connected_displayed = False
 
-        # 温度、湿度を取得
-        temperature, humidity = self.hardware.temp_humi()
+            # 温度、湿度を取得
+            temperature, humidity = self.hardware.temp_humi()
 
-        # OLEDディスプレイに表示
-        if hardware.oled:
+            hardware = self.hardware
             hardware.oled.fill_rect(0, 10, hardware.oled.width, hardware.oled.height - 10, 0)
             hardware.oled.text("Temp: {:.1f}C".format(temperature), 0, 10)
             hardware.oled.text("Humi: {:.1f}%".format(humidity), 0, 20)
