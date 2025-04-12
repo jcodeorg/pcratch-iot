@@ -27,6 +27,19 @@ class IoTServer:
                 params[key] = value
         return params
 
+    def user_led_demo(self):
+        for i in range(2):
+            for i in range(4):
+                self.hardware.PIN15.value(1)
+                time.sleep(0.5)
+                self.hardware.PIN15.value(0)
+                time.sleep(0.5)
+            for i in range(4):
+                self.hardware.PIN15.value(1)
+                time.sleep(0.1)
+                self.hardware.PIN15.value(0)
+                time.sleep(0.1)
+
     def play_tone(self, frequency, duration):
         """指定した周波数と持続時間で音を再生"""
         self.hardware.play_tone(frequency)
@@ -46,9 +59,10 @@ class IoTServer:
             frequency, duration = note
             self.play_tone(frequency, duration)
 
-    def np_reset(self):
-        self.hardware.pixcel(0, 0, 0, 0)
-        self.hardware.pixcel(1, 0, 0, 0)
+    def npoff(self):
+        """NeoPixelを消灯"""
+        for i in range(2):
+            self.hardware.pixcel(i, 0, 0, 0)
 
     def color_wipe(self, color, delay=200):
         """NeoPixelを指定した色に変化させる"""
@@ -57,43 +71,13 @@ class IoTServer:
             self.hardware.pixcel(i, r / 255 * 100, g / 255 * 100, b / 255 * 100)
             time.sleep_ms(delay)
 
-    def rainbow_cycle(self, delay=20):
-        """虹色のアニメーションを作成"""
-        for j in range(256):
-            for i in range(2):
-                pixel_index = (i * 256 // 2) + j
-                r, g, b = self.wheel(pixel_index & 255)
-                self.hardware.pixcel(i, r / 255 * 100, g / 255 * 100, b / 255 * 100)
-            time.sleep_ms(delay)
-
-    def wheel(self, pos):
-        """0-255の値をRGBの色に変換"""
-        if pos < 85:
-            return (pos * 3, 255 - pos * 3, 0)
-        elif pos < 170:
-            pos -= 85
-            return (255 - pos * 3, 0, pos * 3)
-        else:
-            pos -= 170
-            return (0, pos * 3, 255 - pos * 3)
-
-    def npoff(self):
-        """NeoPixelを消灯"""
-        for i in range(2):
-            self.hardware.pixcel(i, 0, 0, 0)
-
-    def demo1(self):
+    def np_led_demo(self):
         """デモ1: 赤、緑、青の順に点灯"""
         for i in range(3):
             self.color_wipe((255, 0, 0))
             self.color_wipe((0, 255, 0))
             self.color_wipe((0, 0, 255))
             time.sleep(0.5)
-        self.npoff()
-
-    def demo2(self):
-        """デモ2: 虹色アニメーション"""
-        self.rainbow_cycle()
         self.npoff()
 
     # デフォルトのHTMLレスポンス
@@ -195,9 +179,9 @@ Content-Type: text/html; charset=utf-8
         <input type="submit" value="設定変更">
         <button type="button" onclick="location.href='/scan'">WiFiスキャン</button>
     </form>
-    <button onclick="location.href='/demo1'">デモ1</button>
-    <button onclick="location.href='/demo2'">デモ2</button>
-    <button onclick="location.href='/demo3'">メロディ</button>
+    <button onclick="location.href='/demo1'">Lチカ</button>
+    <button onclick="location.href='/demo2'">カラーLEDデモ</button>
+    <button onclick="location.href='/demo3'">音楽デモ</button>
     <p><img src="/oled_bitmap.bmp" alt="OLED Bitmap" style="width: 100%; height: auto; border: 5px solid black;"></p>
 </body>
 </html>
@@ -213,12 +197,19 @@ Content-Type: text/html; charset=utf-8
             print("デフォルトメインモジュール:", default_main_module)
             # ルートディレクトリの *.py ファイルをリストアップ
             self.py_files = [f for f in os.listdir() if f.endswith(".py")]
+            # default_ssid を既存のネットワークリストに追加
+            self.networks.append((default_ssid.encode('utf-8'), None, None, None, None, None))
+
+    def scan_wifi_networks(self):
             # Wi-Fiネットワークをスキャン
             sta = self.hardware.wifi_sta
             sta.active(False)
             time.sleep(1)
             sta.active(True)
             self.networks = sta.scan()
+            # default_ssid を既存のネットワークリストに追加
+            default_ssid, _, _ = self.wifi_confifg
+            self.networks.append((default_ssid.encode('utf-8'), None, None, None, None, None))
             print("スキャンしたWi-Fiネットワーク:", self.networks)
 
     def handle_request(self, cl, request):
@@ -272,16 +263,17 @@ Content-Type: text/html; charset=utf-8
 
         elif "GET /scan" in request:
             print("Wi-Fiスキャンを開始します...")
-            self.get_wifi_config()
+            # self.get_wifi_config
+            self.scan_wifi_networks()
             cl.send(self.get_redirect_response())
 
         elif "GET /demo1" in request:
-            print("demo1...")
-            self.demo1()
+            print("ESP32C6 LEDのデモ...")
+            self.user_led_demo()
             cl.send(self.get_redirect_response())
         elif "GET /demo2" in request:
-            print("demo2...")
-            self.demo2()
+            print("NP_LED のデモ...")
+            self.np_led_demo()
             cl.send(self.get_redirect_response())
         elif "GET /demo3" in request:
             print("demo3...")
@@ -314,7 +306,8 @@ Content-Type: text/html; charset=utf-8
         s.listen(1)
         print("HTTPサーバーが起動しました")
 
-        self.get_wifi_config()  # 表示情報を取得
+        self.get_wifi_config()  # CONFIG情報を取得
+
         while self.running:
             try:
                 cl, addr = s.accept()

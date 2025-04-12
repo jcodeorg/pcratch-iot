@@ -69,7 +69,7 @@ def print_memory_usage():
 
 # サーバーをバックグラウンドスレッドで実行
 def server_thread():
-    time.sleep(10)  # スレッドの初期化を待つ
+    # time.sleep(10)  # スレッドの初期化を待つ
     server = IoTServer()
     server.start_http_server()  # HTTPサーバーを起動
 
