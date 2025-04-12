@@ -18,7 +18,7 @@ class Hardware:
     def __init__(self):
         if not hasattr(self, "initialized"):  # 初期化が1回だけ行われるようにする
             self.initialized = True
-            print("Initializing hardware...")
+            print("Welcome to ESP32C6 pcratch-IoT v1.4.4")
             # ESP32C6 Pin layout
             #                     GPIO15: USER LED
             # GPIO0 :A0 :         5V
@@ -28,7 +28,6 @@ class Hardware:
             # GPIO22:SDA:         GPIO20:   :
             # GPIO23:SDL:         GPIO19:   :
             # GPIO16:TX : NP-LED  GPIO17:RX :Right Button
-            print("Welcome to ESP32C6")
             self.adc0 = Pin(0, Pin.IN, Pin.PULL_DOWN)
             self.adc1 = ADC(Pin(1, Pin.IN))
             self.adc2 = ADC(Pin(2, Pin.IN))
@@ -206,6 +205,8 @@ class Hardware:
             pwm = self.PWM19
         elif pin == 20:
             pwm = self.PWM20
+        elif pin == 15:
+            self.PIN15.value(1 if n != 0 else 0)
         else:
             return
         duty = int(65535 * n / 1024)
