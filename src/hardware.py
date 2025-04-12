@@ -1,6 +1,5 @@
-# ESP32C6 pcratch-IoT(micro:bit) v1.2.5
+# ESP32C6 pcratch-IoT v1.4.0
 import struct
-import time
 import framebuf
 import network
 from machine import Pin, I2C, ADC, PWM

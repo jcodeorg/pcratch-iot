@@ -1,5 +1,4 @@
-# ESP32C6 pcratch-IoT v1.3.4
-
+# ESP32C6 pcratch-IoT v1.4.0
 import asyncio
 import _thread
 from ble_conn import BLEConnection

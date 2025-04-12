@@ -1,6 +1,4 @@
-# ESP32C6 pcratch-IoT v1.3.4
-from machine import Pin
-from neopixel import NeoPixel
+# ESP32C6 pcratch-IoT v1.4.0
 import time
 from hardware import Hardware
 

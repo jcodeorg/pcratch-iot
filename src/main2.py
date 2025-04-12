@@ -1,7 +1,4 @@
-# ESP32C6 pcratch-IoT v1.3.4
-# 天気予報のデモ
-
-import time
+# ESP32C6 pcratch-IoT v1.4.0
 import asyncio
 import _thread
 

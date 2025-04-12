@@ -1,3 +1,4 @@
+# ESP32C6 pcratch-IoT v1.4.0
 from server import IoTServer
 from hardware import Hardware
 

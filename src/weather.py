@@ -1,7 +1,7 @@
-# ESP32C6 pcratch-IoT v1.3.2
+# ESP32C6 pcratch-IoT v1.4.0
 # ネットワーク天気予報
 
-# from misakifont import MisakiFont
+# from misakifont import MisakiFont 日本語フォント
 import urequests
 import json
 

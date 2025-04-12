@@ -1,6 +1,5 @@
-# ESP32C6 pcratch-IoT v1.3.2
+# ESP32C6 pcratch-IoT v1.4.0
 # ネットワーク対応時計
-
 import ntptime
 import time
 import framebuf
