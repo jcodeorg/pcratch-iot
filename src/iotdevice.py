@@ -54,47 +54,28 @@ class Device:
         }
         self.pin_event_time = {}
 
+        # PIN 17, 18 のイベントハンドラ登録
+        self.hardware.register_button_handler(17, self.pin_notification)
+        self.hardware.register_button_handler(18, self.pin_notification)
+
+    # ピンのイベントをBLEで通知する
+    # pinIndex = dataView.getUint8(0);
+    # event = dataView.getUint8(1);
+    # value: dataView.getUint32(2, true)
+    def pin_notification(self, pinIndex, event_name):
+        # print(f"pin_notification {pinIndex} に {event_name} イベント")
+        buffer = bytearray(20)
+        buffer[19] = MbitMoreDataFormat["PIN_EVENT"]
+        event = MbitMorePinEvent[event_name]
+        timestamp = time.ticks_ms()
+        packed_data = struct.pack('<BBI', pinIndex, event, timestamp)
+        buffer[0:6] = packed_data
+        self.ble_conn.send_notification(buffer)
+
     # ボタンの状態を取得
     def get_button_state(self, button_name):
         return self.button_state[button_name]
     
-    '''
-    def handle_button_event(self, pin, button_name):
-        if pin.value() == 1:  # ボタンが押された
-            if not self.button_state[button_name]['pressed']:
-                self.button_state[button_name]['pressed'] = True
-                self.button_state[button_name]['press_time'] = time.ticks_ms()
-                self.button_state[button_name]['down_count'] += 1
-                print(f"Button {button_name} DOWN, Count: {self.button_state[button_name]['down_count']}")
-                self.button_notification(button_name, "DOWN")
-        else:  # ボタンが離された
-            if self.button_state[button_name]['pressed']:
-                self.button_state[button_name]['pressed'] = False
-                press_duration = time.ticks_diff(time.ticks_ms(), self.button_state[button_name]['press_time'])
-                if press_duration < 500:
-                    self.button_notification(button_name, "CLICK")
-                else:
-                    self.button_notification(button_name, "UP")
-
-    def register_button_irq(self):
-        self.PIN17.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: self.handle_button_event(pin, 'B'))
-        self.PIN18.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: self.handle_button_event(pin, 'A'))
-    '''
-    def handle_button_event(self, pin, pinIndex):
-        # time.sleep_ms(80)  # 80msの遅延を追加してチャタリングを軽減
-        current_event = "RISE" if pin.value() == 1 else "FALL"
-        if pinIndex not in self.pin_event_time:
-            self.pin_event_time[pinIndex] = ''
-
-        if current_event == self.pin_event_time[pinIndex]:
-            return  # 同じイベントが発生した場合は無視
-        self.pin_event_time[pinIndex] = current_event
-        self.pin_notification(pinIndex, current_event)
-
-    def register_button_irq(self):
-        self.PIN17.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: self.handle_button_event(pin, 17))
-        self.PIN18.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: self.handle_button_event(pin, 18))
-
     async def do_command(self, data):
         # バイナリデータをリストに変換
         data_list = list(data)
@@ -154,20 +135,6 @@ class Device:
         timestamp = time.ticks_ms()
         packed_data = struct.pack('<BHBI', action, button, event, timestamp)
         buffer[0:8] = packed_data
-        self.ble_conn.send_notification(buffer)
-
-    # ピンのイベントをBLEで通知する
-    # pinIndex = dataView.getUint8(0);
-    # event = dataView.getUint8(1);
-    # value: dataView.getUint32(2, true)
-    def pin_notification(self, pinIndex, event_name):
-        print(f"ピン {pinIndex} に {event_name} イベント")
-        buffer = bytearray(20)
-        buffer[19] = MbitMoreDataFormat["PIN_EVENT"]
-        event = MbitMorePinEvent[event_name]
-        timestamp = time.ticks_ms()
-        packed_data = struct.pack('<BBI', pinIndex, event, timestamp)
-        buffer[0:6] = packed_data
         self.ble_conn.send_notification(buffer)
 
     # 定期的にハードウェアのセンサ値を送信する

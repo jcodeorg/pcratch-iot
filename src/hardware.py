@@ -7,6 +7,8 @@ from ssd1306 import SSD1306_I2C
 from neopixel import NeoPixel
 from ahtx0 import AHT20
 
+VERSION = "v1.4.5.1"
+
 class Hardware:
     _instance = None
 
@@ -18,7 +20,8 @@ class Hardware:
     def __init__(self):
         if not hasattr(self, "initialized"):  # 初期化が1回だけ行われるようにする
             self.initialized = True
-            print("Welcome to ESP32C6 pcratch-IoT v1.4.4")
+            self.version = VERSION
+            print(f"Welcome to ESP32C6 pcratch-IoT {self.version}")
             # ESP32C6 Pin layout
             #                     GPIO15: USER LED
             # GPIO0 :A0 :         5V
@@ -56,6 +59,7 @@ class Hardware:
             self.PIN15 = Pin(15, Pin.OUT)    # create output pin on GPIO0
             # p1 = Pin(3, Pin.OUT)    # create output pin on GPIO0
             # p1.value(1)
+            self.device =None
 
     def get_friendly_name(self, unique_id):
         """ユニークIDからフレンドリー名を生成"""
@@ -161,9 +165,11 @@ class Hardware:
     def register_button_handler(self, pinIndex, handler):
         """ボタンイベントのハンドラーを登録"""
         self.button_handlers[pinIndex] = handler
+        print(f"register_button_handler {pinIndex} {handler} {len(self.button_handlers)}")
 
     def handle_button_event(self, pin, pinIndex):
         # time.sleep_ms(80)  # 80msの遅延を追加してチャタリングを軽減
+        # print(f"event {pinIndex}")
         current_event = "RISE" if pin.value() == 1 else "FALL"
         if pinIndex not in self.pin_event_time:
             self.pin_event_time[pinIndex] = ''
@@ -171,10 +177,11 @@ class Hardware:
         if current_event == self.pin_event_time[pinIndex]:
             return  # 同じイベントが発生した場合は無視
         self.pin_event_time[pinIndex] = current_event
-        # self.pin_notification(pinIndex, current_event)
+        # print(f"event {pinIndex}  {current_event} {len(self.button_handlers)}")
         # 登録されたハンドラーを呼び出す
         if pinIndex in self.button_handlers:
             handler = self.button_handlers[pinIndex]
+            # print(f"handler {pinIndex} に {current_event} イベント")
             handler(pinIndex, current_event)  # ハンドラーにイベントを渡す
 
     def register_button_irq(self):

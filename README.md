@@ -16,3 +16,7 @@ cd src
 mpremote cp -r ./ :
 # REPL
 mpremote repl
+# reset
+mpremote reset
+
+mpremote cp iotdevice.py hardware.py :
