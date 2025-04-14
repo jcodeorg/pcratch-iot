@@ -30,16 +30,18 @@ class IoTServer:
 
     def user_led_demo(self):
         for i in range(2):
-            for i in range(4):
-                self.hardware.PIN15.value(1)
-                time.sleep(0.5)
-                self.hardware.PIN15.value(0)
-                time.sleep(0.5)
+            self.hardware.play_tone(440)  # 音を鳴らす
             for i in range(4):
                 self.hardware.PIN15.value(1)
                 time.sleep(0.1)
                 self.hardware.PIN15.value(0)
                 time.sleep(0.1)
+            self.hardware.stop_tone()
+            for i in range(4):
+                self.hardware.PIN15.value(1)
+                time.sleep(0.5)
+                self.hardware.PIN15.value(0)
+                time.sleep(0.5)
 
     def play_tone(self, frequency, duration):
         """指定した周波数と持続時間で音を再生"""

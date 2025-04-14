@@ -40,7 +40,7 @@ class IoTManager:
         self.colors2 = []
         self.colors3 = []
         self.music = []
-
+        self.demo_handlers = {}  # デモハンドラーを格納する辞書
         asyncio.create_task(self.ble_conn.motion_task())
         asyncio.create_task(self.ble_conn.peripheral_task())
         asyncio.create_task(self.sensor_task())
@@ -68,22 +68,33 @@ class IoTManager:
             hardware.oled.text("HS  : {:.1f}".format(hardware.human_sensor()), 0, 40)
             hardware.oled.show()
 
+        # ホストと未接続なら、デモができる
+        if not self.ble_conn.connection:
+            demo_name = ""
+            if self.hardware.PIN17.value() == 1:
+                demo_name = "PIN17"
+            elif self.hardware.PIN18.value() == 1:
+                demo_name = "PIN18"
+            if demo_name in self.demo_handlers:
+                self.demo_handlers[demo_name]()
+
     # センサーの値を 250ms 毎に送信
     async def sensor_task(self):
         while True:
-            if self.device.ble_conn.connection:  # BLE接続がある場合
+            if self.ble_conn.connection:  # BLE接続がある場合
                 self.device.send_sensor_value()
             await asyncio.sleep_ms(250)
 
-# サーバーをバックグラウンドスレッドで実行
-def server_thread():
-    server = IoTServer()
-    server.start_http_server()  # HTTPサーバーを起動
+    def register_demo_handler(self, demo_name, demo_handler):
+        self.demo_handlers[demo_name] = demo_handler
 
 async def main():
     # インスタンスの作成と使用例
     iot_manager = IoTManager()
-    _thread.start_new_thread(server_thread, ())
+    server = IoTServer()  # HTTPサーバーをバックグラウンドスレッドで実行
+    _thread.start_new_thread(server.start_http_server, ())
+    iot_manager.register_demo_handler("PIN17", server.np_led_demo)
+    iot_manager.register_demo_handler("PIN18", server.user_led_demo)
 
     while True:
         # print("メイン処理実行中...")
