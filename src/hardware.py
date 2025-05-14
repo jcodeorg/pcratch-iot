@@ -1,4 +1,4 @@
-# ESP32C6 pcratch-IoT v1.4.2
+# ESP32C6 pcratch-IoT v1.5.1.1
 import struct
 import framebuf
 import network
@@ -7,7 +7,7 @@ from ssd1306 import SSD1306_I2C
 from neopixel import NeoPixel
 from ahtx0 import AHT20
 
-VERSION = 'v1.4.5.3'
+VERSION = 'v1.5.1.1'
 
 class Hardware:
     _instance = None
@@ -32,7 +32,7 @@ class Hardware:
             # GPIO23:SDL:         GPIO19:   :
             # GPIO16:TX : NP-LED  GPIO17:RX :Right Button
             self.adc0 = Pin(0, Pin.IN, Pin.PULL_DOWN)
-            self.adc1 = ADC(Pin(1, Pin.IN))
+            self.PWM01 = PWM(Pin(1, Pin.OUT), freq=50, duty=0)
             self.adc2 = ADC(Pin(2, Pin.IN))
             self.adc2.atten(ADC.ATTN_11DB)
             self.adc2.width(ADC.WIDTH_12BIT)
@@ -196,7 +196,9 @@ class Hardware:
             self.PWM19.duty_u16(duty)
         elif pin == 20:
             self.PWM20.duty_u16(duty)
-        elif pin == 15:
+        elif pin == 1:
+            self.PWM01.duty_u16(duty)
+        elif pin == 15: # ユーザLED
             self.PIN15.value(n)
 
     # print(f"ピン {pin} をアナログ出力 {n} %にする")
@@ -206,7 +208,9 @@ class Hardware:
             self.PWM19.duty_u16(duty)
         elif pin == 20:
             self.PWM20.duty_u16(duty)
-        elif pin == 15:
+        elif pin == 1:
+            self.PWM01.duty_u16(duty)
+        elif pin == 15: # ユーザLED
             self.PIN15.value(1 if n != 0 else 0)
 
     def show_text(self, s, t=0):
