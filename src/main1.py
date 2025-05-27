@@ -1,29 +1,10 @@
-# ESP32C6 pcratch-IoT v1.5.1.1
+# ESP32C6 pcratch-IoT v1.5.1.2
 import asyncio
 import _thread
 from ble_conn import BLEConnection
 from iotdevice import Device
 from hardware import Hardware
 from server import IoTServer  # 作成したモジュールをインポート
-
-# デフォルトのSSID、パスワード、メインモジュールを読み込む
-SSID = ""
-PASSWORD = ""
-default_main_module = ""
-try:
-    with open("wifi_config.txt", "r") as f:
-        for line in f:
-            if line.startswith("SSID="):
-                SSID = line.strip().split("=", 1)[1]
-            elif line.startswith("PASSWORD="):
-                PASSWORD = line.strip().split("=", 1)[1]
-            elif line.startswith("MAIN_MODULE="):
-                default_main_module = line.strip().split("=", 1)[1]
-except Exception as e:
-    print(f"Error reading wifi_config.txt: {e}")
-print("デフォルトSSID:", SSID)
-print("デフォルトパスワード:", PASSWORD)
-print("デフォルトメインモジュール:", default_main_module)
 
 # デバイスとBLE接続を管理するクラス
 class IoTManager:

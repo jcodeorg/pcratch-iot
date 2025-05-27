@@ -1,4 +1,4 @@
-# ESP32C6 pcratch-IoT v1.5.1.1
+# ESP32C6 pcratch-IoT v1.5.1.2
 import struct
 import framebuf
 import network
@@ -7,7 +7,7 @@ from ssd1306 import SSD1306_I2C
 from neopixel import NeoPixel
 from ahtx0 import AHT20
 
-VERSION = 'v1.5.1.1'
+VERSION = 'v1.5.1.2'
 
 class Hardware:
     _instance = None
@@ -125,7 +125,7 @@ class Hardware:
         """デフォルトのSSIDとパスワードを読み込む"""
         default_ssid = ""
         default_password = ""
-        default_main_module = ""
+        default_main_module = "main1.py"
         try:
             with open("wifi_config.txt", "r") as f:
                 for line in f:
