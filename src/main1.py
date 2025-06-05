@@ -1,4 +1,4 @@
-# ESP32C6 pcratch-IoT v1.5.1.2
+# ESP32C6 pcratch-IoT v1.5.1.3
 import asyncio
 import _thread
 from ble_conn import BLEConnection
@@ -45,10 +45,11 @@ class IoTManager:
 
             hardware = self.hardware
             hardware.oled.fill_rect(0, 10, hardware.oled.width, hardware.oled.height - 10, 0)
-            hardware.oled.text("Temp: {:.1f}C".format(temperature), 0, 10)
-            hardware.oled.text("Humi: {:.1f}%".format(humidity), 0, 20)
-            hardware.oled.text("Ligh: {:.1f}".format(light_level/255*100), 0, 30)   # 照度センサーの値
-            hardware.oled.text("HS  : {:.1f}".format(hardware.human_sensor()), 0, 40)
+            hardware.oled.text( "Temp: {:.1f}C".format(temperature), 0, 10)
+            hardware.oled.text( "Humi: {:.1f}%".format(humidity), 0, 20)
+            hardware.oled.text( "Ligh: {:.1f}".format(light_level/255*100), 0, 30)   # 照度センサーの値
+            hardware.oled.text( "A0  : {:.1f}".format(hardware.human_sensor()), 0, 40)
+            hardware.oled.text(f"Ver : {hardware.version}", 0, 50)
             hardware.oled.show()
 
         # ホストと未接続なら、デモができる

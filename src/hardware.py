@@ -1,4 +1,4 @@
-# ESP32C6 pcratch-IoT v1.5.1.2
+# ESP32C6 pcratch-IoT v1.5.1.3
 import struct
 import framebuf
 import network
@@ -7,7 +7,7 @@ from ssd1306 import SSD1306_I2C
 from neopixel import NeoPixel
 from ahtx0 import AHT20
 
-VERSION = 'v1.5.1.2'
+VERSION = 'v1.5.1.3'
 
 class Hardware:
     _instance = None
