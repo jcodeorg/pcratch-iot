@@ -163,8 +163,7 @@ class Device:
             (btnb << 4+24) |
             (self.hardware.human_sensor() << 5+24)
         )
-        light_level = self.hardware.lux()
-        light_level = max(0, min(255, int(light_level/500*255)))
+        light_level = int(self.hardware.get_light_level() / 100 * 255)
         temperature, humidity = self.hardware.temp_humi()
         temperature = max(0, min(255, int(temperature+128)))
         humidity = max(0, min(255, int(humidity/100*255)))

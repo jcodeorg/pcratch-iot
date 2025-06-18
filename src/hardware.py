@@ -7,7 +7,7 @@ from ssd1306 import SSD1306_I2C
 from neopixel import NeoPixel
 from ahtx0 import AHT20
 
-VERSION = 'v1.5.1.3'
+VERSION = 'v1.5.1.4'
 
 class Hardware:
     _instance = None
@@ -247,9 +247,9 @@ class Hardware:
                 return 1
         return 0
 
-    def lux(self):
-        val = self.adc2.read_u16() / 65535 * 3.6 * 20/9/10000 * (10 ** 6)
-        return val
+    # 明るさを1～100の範囲で返す関数
+    def get_light_level(self):
+        return self.adc2.read() / 4095 * 100
 
     def temp_humi(self):
         if self.aht20:
