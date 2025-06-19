@@ -7,10 +7,7 @@ from ahtx0 import AHT20
 MODES = ["切", "弱", "強", "自動"]
 current_mode = 0  # 初期状態（切）
 
-# 割り込みを設定
-P17 = Pin(17, Pin.IN, Pin.PULL_DOWN)
-
-# PWMの初期化
+# P01をPWM出力で初期化
 P01 = PWM(Pin(1, Pin.OUT), freq=50, duty=0)
 
 # I2Cの初期化
@@ -22,24 +19,34 @@ aht20 = AHT20(i2c)
 # 風量を設定する関数
 def set_fan_speed(mode):
     if mode == "弱":
-        P01.duty(300)   # 低速
+        P01.duty(500)   # 低速
     elif mode == "強":
-        P01.duty(800)   # 高速
+        P01.duty(900)   # 高速
     else:
         P01.duty(0)     # モータ停止
 
-# 風量を変更する関数
+# 割り込み禁止用のフラグとタイマー
+last_irq_time = 0
+DEBOUNCE_MS = 500  # 500ミリ秒は割り込みを無視
+
+# 風量を変更する関数（割り込みハンドラ）
 def change_fan_speed(pin):
-    global current_mode
-    time.sleep_ms(80)  # 80msの遅延を追加してチャタリングを軽減
+    global current_mode, last_irq_time
+    now = time.ticks_ms()
+    # 前回の割り込みから一定時間経過していなければ無視
+    if time.ticks_diff(now, last_irq_time) < DEBOUNCE_MS:
+        return
+    last_irq_time = now
+
     current_mode = (current_mode + 1) % len(MODES)
     print(f"風量モード: {MODES[current_mode]}")
     set_fan_speed(MODES[current_mode])
 
-# 割り込みハンドラを設定
+# P17スイッチに割り込みハンドラを設定
+P17 = Pin(17, Pin.IN, Pin.PULL_DOWN)
 P17.irq(trigger=Pin.IRQ_RISING, handler=change_fan_speed)
 
-# ずっとくりかえすメインの処理
+# メインループ（ずっとくりかえす）
 while True:
     if MODES[current_mode] == "自動":
         temperature = aht20.temperature
