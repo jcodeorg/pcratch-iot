@@ -42,13 +42,15 @@ class IoTManager:
             temperature, humidity = self.hardware.temp_humi()
             light_level = self.hardware.get_light_level()
 
+            # OLED 128 x 64
+            t = 6
             hardware = self.hardware
             hardware.oled.fill_rect(0, 10, hardware.oled.width, hardware.oled.height - 10, 0)
-            hardware.oled.text( "Temp: {:.1f}C".format(temperature), 0, 10)
-            hardware.oled.text( "Humi: {:.1f}%".format(humidity), 0, 20)
-            hardware.oled.text( "Ligh: {:.1f}".format(light_level), 0, 30)   # 照度センサーの値
-            hardware.oled.text( "A0  : {:.1f}".format(hardware.human_sensor()), 0, 40)
-            hardware.oled.text(f"Ver : {hardware.version}", 0, 50)
+            hardware.oled.text( "Temp: {:.1f}C".format(temperature), 0, t+10)
+            hardware.oled.text( "Humi: {:.1f}%".format(humidity), 0, t+20)
+            hardware.oled.text( "Ligh: {:.1f}".format(light_level), 0, t+30)   # 照度センサーの値
+            hardware.oled.text( "A0  : {:.1f}".format(hardware.human_sensor()), 0, t+40)
+            hardware.oled.text(f"Ver : {hardware.version}", 0, t+50)
             hardware.oled.show()
 
         # ホストと未接続なら、デモができる

@@ -14,9 +14,9 @@ async def app():
     hardware = Hardware()
     default_ssid, default_password, default_main_module = hardware.get_wifi_config()
     hardware.oled.fill(0)
-    hardware.oled.text(default_ssid, 0, 10)
-    hardware.oled.text(default_password, 0, 20)
-    hardware.oled.text(default_main_module, 0, 30)
+    hardware.oled.text(default_ssid, 0, 16)
+    hardware.oled.text(default_password, 0, 26)
+    hardware.oled.text(default_main_module, 0, 36)
     hardware.oled.show()
 
     print('wifi_sta_active...')

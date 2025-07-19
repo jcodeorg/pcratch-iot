@@ -36,7 +36,7 @@ class Clock:
         # 上10ドットをそのままにして、下の部分だけ書き直す
         if self.oled:
             self.oled.fill_rect(0, 0, self.oled.width, self.oled.height - 0, 0)
-            self.oled.text(formatted_date, 0, 10)
+            self.oled.text(formatted_date, 0, 0)
             self.draw_text_double_size(formatted_time, 0, 30)
             self.oled.line(0, 50, 127, 50, 1)
             self.oled.text(formatted_temp, 0, 54)

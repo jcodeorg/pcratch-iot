@@ -7,7 +7,7 @@ from ssd1306 import SSD1306_I2C
 from neopixel import NeoPixel
 from ahtx0 import AHT20
 
-VERSION = 'v1.5.1.5'
+VERSION = 'v1.5.1.6'
 
 class Hardware:
     _instance = None
