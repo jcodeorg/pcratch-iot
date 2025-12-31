@@ -50,7 +50,7 @@ class IoTManager:
             hardware.oled.text( "Humi: {:.1f}%".format(humidity), 0, t+20)
             hardware.oled.text( "Ligh: {:.1f}".format(light_level), 0, t+30)   # 照度センサーの値
             hardware.oled.text( "A0  : {:.1f}".format(hardware.human_sensor()), 0, t+40)
-            hardware.oled.text(f"Ver : {hardware.version}", 0, t+50)
+            hardware.oled.text(f"  {hardware.version}-{hardware.hw_version}", 0, t+50)
             hardware.oled.show()
 
         # ホストと未接続なら、デモができる
@@ -58,7 +58,7 @@ class IoTManager:
             demo_name = ""
             if self.hardware.PIN17.value() == 1:
                 demo_name = "PIN17"
-            elif self.hardware.PIN18.value() == 1:
+            elif self.hardware.leftbtn.value() == 1:
                 demo_name = "PIN18"
             if demo_name in self.demo_handlers:
                 self.demo_handlers[demo_name]()

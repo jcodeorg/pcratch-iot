@@ -7,7 +7,8 @@ from ssd1306 import SSD1306_I2C
 from neopixel import NeoPixel
 from ahtx0 import AHT20
 
-VERSION = 'v1.5.1.6'
+VERSION = 'v2.0.1.0'
+# HW_VERSION=2.0 に対応（16と18が入れ替え）
 
 class Hardware:
     _instance = None
@@ -21,7 +22,8 @@ class Hardware:
         if not hasattr(self, "initialized"):  # 初期化が1回だけ行われるようにする
             self.initialized = True
             self.version = VERSION
-            print(f"Welcome to ESP32C6 pcratch-IoT {self.version}")
+            ssid, passw, main, self.hw_version =  self.get_wifi_config()
+            print(f"Welcome to ESP32C6 pcratch-IoT {self.version}-{self.hw_version}")
             # ESP32C6 Pin layout
             #                     GPIO15: USER LED
             # GPIO0 :A0 :         5V
@@ -38,9 +40,14 @@ class Hardware:
             self.adc2.width(ADC.WIDTH_12BIT)
             self.i2c = I2C(0, scl=Pin(23), sda=Pin(22))
             self.PIN15 = Pin(15, Pin.OUT)    # USER LED
-            self.PIN16 = NeoPixel(Pin(16, Pin.OUT), 2)
-            self.PIN17 = Pin(17, Pin.IN, Pin.PULL_DOWN)
-            self.PIN18 = Pin(18, Pin.IN, Pin.PULL_DOWN)
+            if self.hw_version == "2.0":
+                # pin18とpin16を入れ替え
+                self.npled = NeoPixel(Pin(18, Pin.OUT), 2)
+                self.leftbtn = Pin(16, Pin.IN, Pin.PULL_DOWN)  # Left Button
+            else:
+                self.npled = NeoPixel(Pin(16, Pin.OUT), 2)
+                self.leftbtn = Pin(18, Pin.IN, Pin.PULL_DOWN)  # Left Button
+            self.PIN17 = Pin(17, Pin.IN, Pin.PULL_DOWN)  # Right Button
             self.PWM19 = PWM(Pin(19, Pin.OUT), freq=50, duty=0)
             self.PWM20 = PWM(Pin(20, Pin.OUT), freq=50, duty=0)
             self.PWM21 = PWM(Pin(21, Pin.OUT), freq=50, duty=0)
@@ -126,6 +133,7 @@ class Hardware:
         default_ssid = ""
         default_password = ""
         default_main_module = "main1.py"
+        default_hw_versione = "1.0"
         try:
             with open("wifi_config.txt", "r") as f:
                 for line in f:
@@ -135,9 +143,11 @@ class Hardware:
                         default_password = line.strip().split("=", 1)[1]
                     elif line.startswith("MAIN_MODULE="):
                         default_main_module = line.strip().split("=", 1)[1]
+                    elif line.startswith("HW_VERSION="):
+                        default_hw_versione = line.strip().split("=", 1)[1]
         except Exception as e:
             print(f"wifi_config.txt 読み込みエラー: {e}")
-        return default_ssid, default_password, default_main_module
+        return default_ssid, default_password, default_main_module, default_hw_versione
 
     def init_oled(self):
         self.oled = None
@@ -187,7 +197,11 @@ class Hardware:
     def register_button_irq(self):
         """ボタンのIRQを登録"""
         self.PIN17.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: self.handle_button_event(pin, 17))
-        self.PIN18.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: self.handle_button_event(pin, 18))
+        if self.hw_version == "2.0":
+            # pin18とpin16を入れ替え
+            self.leftbtn.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: self.handle_button_event(pin, 16))
+        else:
+            self.leftbtn.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda pin: self.handle_button_event(pin, 18))
 
     # print(f"ピン {pin} に {n} を出力")
     def digital_out(self, pin, n):
@@ -261,8 +275,8 @@ class Hardware:
         return temperature, humidity
 
     def pixcel(self, n, r, g, b):
-        self.PIN16[n] = (int(r / 100 * 255), int(g / 100 * 255), int(b / 100 * 255))  # n番の NeoPixel を点灯
-        self.PIN16.write()
+        self.npled[n] = (int(r / 100 * 255), int(g / 100 * 255), int(b / 100 * 255))  # n番の NeoPixel を点灯
+        self.npled.write()
 
     def init_pixcel(self):
         self.pixcel(0, 0, 0, 0)

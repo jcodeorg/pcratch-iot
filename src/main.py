@@ -10,10 +10,11 @@ from hardware import Hardware
 
 def main():
     hardware = Hardware()
-    default_ssid, default_password, default_main_module =  hardware.get_wifi_config()
+    default_ssid, default_password, default_main_module, hw_version =  hardware.get_wifi_config()
     print("デフォルトSSID:", default_ssid)
     print("デフォルトパスワード:", default_password)
     print("デフォルトメインモジュール:", default_main_module)
+    print("ハードウェアバージョン:", hw_version)
 
     if hardware.PIN17.value() == 1:
         print("ボタンが押されています。netconfig.py を起動します。")

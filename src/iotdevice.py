@@ -54,9 +54,13 @@ class Device:
         }
         self.pin_event_time = {}
 
-        # PIN 17, 18 のイベントハンドラ登録
+        # PIN 17, 18 or 16 のイベントハンドラ登録
         self.hardware.register_button_handler(17, self.pin_notification)
-        self.hardware.register_button_handler(18, self.pin_notification)
+        if self.hardware.hw_version == "2.0":
+            # pin18とpin16を入れ替え
+            self.hardware.register_button_handler(16, self.pin_notification)
+        else:
+            self.hardware.register_button_handler(18, self.pin_notification)
 
     # ピンのイベントをBLEで通知する
     # pinIndex = dataView.getUint8(0);
@@ -152,11 +156,22 @@ class Device:
     };
     '''
     def send_sensor_value(self):
-        p17 = 0 if self.hardware.PIN17.value() == 0 else 1
-        p18 = 0 if self.hardware.PIN18.value() == 0 else 1
-        btnb = p17
-        btna = p18
+        if self.hardware.hw_version == "2.0":
+            # pin18とpin16を入れ替え
+            btnb = 0 if self.hardware.PIN17.value() == 0 else 1
+            p17 = btnb
+            btna = 0 if self.hardware.leftbtn.value() == 0 else 1
+            p16 = btna
+            p18 = 0
+        else:
+            btnb = 0 if self.hardware.PIN17.value() == 0 else 1
+            p17 = btnb
+            btna = 0 if self.hardware.leftbtn.value() == 0 else 1
+            p16 = 0
+            p18 = btna
+
         gpio_data = (
+            (p16 << 16) |
             (p17 << 17) |
             (p18 << 18) |
             (btna << 3+24) |
