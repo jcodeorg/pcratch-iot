@@ -23,20 +23,29 @@ DEVICEID = cfg['DEVICEID']
 
 SLEEPTIME = 20*60 # 秒
 WDT_TIMEOUT_MS = 3*60*1000      # 3分以内に feed() しないとリセット
+
+LEDPWM_PIN = 2           # LED 用 PWM ピン
+PUMPPWM_PIN = 0          # PUMP 用 PWM ピン
+
+LED_PIN = 15
+POWER_PIN = 19
+RIGHT_BUTTON_PIN = 17
+
 # WDT 初期化
 # wdt = WDT(timeout=WDT_TIMEOUT_MS)
 
 # Pin 初期化
-led = Pin(15, Pin.OUT)      # ESP32内蔵LED
-power = Pin(19, Pin.OUT)    # センサー電源
+led = Pin(LED_PIN, Pin.OUT)      # ESP32内蔵LED
+power = Pin(POWER_PIN, Pin.OUT)    # センサー電源
 i2c = None
 oled = None
-led_pwm = PWM(Pin(2))     # LED 用 PWM ピン
-pump_pwm = PWM(Pin(1))    # PUMP 用 PWM ピン
+led_pwm = PWM(Pin(LEDPWM_PIN))     # LED 用 PWM ピン
+pump_pwm = PWM(Pin(PUMPPWM_PIN))    # PUMP 用 PWM ピン
 
 led_pwm.freq(1000)
+led_pwm.duty_u16(0)
 pump_pwm.freq(1000)
-
+pump_pwm.duty_u16(0)
 # ==== モード管理 ====
 mode = 0
 modelist = ["LEDON", "LEDOFF", "PUMPON", "PUMPOFF"]
@@ -45,22 +54,16 @@ modelist = ["LEDON", "LEDOFF", "PUMPON", "PUMPOFF"]
 def apply_mode(mode_name):
     print(mode_name)
     if mode_name == "LEDON":
-        led_pwm.duty_u16(30000)   # LED 点灯
-        pump_pwm.duty_u16(0)
+        led_pwm.duty_u16(int(65535 * 1))   # LED 点灯
 
     elif mode_name == "LEDOFF":
         led_pwm.duty_u16(0)       # LED 消灯
-        pump_pwm.duty_u16(0)
 
     elif mode_name == "PUMPON":
-        led_pwm.duty_u16(0)
-        pump_pwm.duty_u16(40000)  # ポンプ ON
+        pump_pwm.duty_u16(int(65535 * 1.0))  # ポンプ ON
 
     elif mode_name == "PUMPOFF":
-        led_pwm.duty_u16(0)
         pump_pwm.duty_u16(0)
-
-    print("MODE:", mode_name)
 
 # ==== ボタン割り込み ====
 def handle_button_event(pin, n):
@@ -70,9 +73,9 @@ def handle_button_event(pin, n):
         mode = (mode + 1) % len(modelist)
         apply_mode(modelist[mode])
 
-PIN17 = Pin(17, Pin.IN, Pin.PULL_DOWN)  # Right Button
+PIN17 = Pin(RIGHT_BUTTON_PIN, Pin.IN, Pin.PULL_DOWN)  # Right Button
 # Pin.IRQ_FALLING | Pin.IRQ_RISING
-PIN17.irq(trigger=Pin.IRQ_RISING, handler=lambda pin: handle_button_event(pin, 17))
+PIN17.irq(trigger=Pin.IRQ_RISING, handler=lambda pin: handle_button_event(pin, RIGHT_BUTTON_PIN))
 
 def blink_led(times=5, sec=0.1):
     for i in range(times):
