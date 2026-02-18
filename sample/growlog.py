@@ -27,10 +27,52 @@ WDT_TIMEOUT_MS = 3*60*1000      # 3分以内に feed() しないとリセット
 # wdt = WDT(timeout=WDT_TIMEOUT_MS)
 
 # Pin 初期化
-led = Pin(15, Pin.OUT)
-power = Pin(19, Pin.OUT)
+led = Pin(15, Pin.OUT)      # ESP32内蔵LED
+power = Pin(19, Pin.OUT)    # センサー電源
 i2c = None
 oled = None
+led_pwm = PWM(Pin(2))     # LED 用 PWM ピン
+pump_pwm = PWM(Pin(1))    # PUMP 用 PWM ピン
+
+led_pwm.freq(1000)
+pump_pwm.freq(1000)
+
+# ==== モード管理 ====
+mode = 0
+modelist = ["LEDON", "LEDOFF", "PUMPON", "PUMPOFF"]
+
+# ==== PWM 出力関数 ====
+def apply_mode(mode_name):
+    print(mode_name)
+    if mode_name == "LEDON":
+        led_pwm.duty_u16(30000)   # LED 点灯
+        pump_pwm.duty_u16(0)
+
+    elif mode_name == "LEDOFF":
+        led_pwm.duty_u16(0)       # LED 消灯
+        pump_pwm.duty_u16(0)
+
+    elif mode_name == "PUMPON":
+        led_pwm.duty_u16(0)
+        pump_pwm.duty_u16(40000)  # ポンプ ON
+
+    elif mode_name == "PUMPOFF":
+        led_pwm.duty_u16(0)
+        pump_pwm.duty_u16(0)
+
+    print("MODE:", mode_name)
+
+# ==== ボタン割り込み ====
+def handle_button_event(pin, n):
+    global mode
+    time.sleep_ms(80)  # チャタリング対策
+    if pin.value() == 1:  # 押されたときだけ反応（プルダウン前提）
+        mode = (mode + 1) % len(modelist)
+        apply_mode(modelist[mode])
+
+PIN17 = Pin(17, Pin.IN, Pin.PULL_DOWN)  # Right Button
+# Pin.IRQ_FALLING | Pin.IRQ_RISING
+PIN17.irq(trigger=Pin.IRQ_RISING, handler=lambda pin: handle_button_event(pin, 17))
 
 def blink_led(times=5, sec=0.1):
     for i in range(times):
@@ -256,12 +298,14 @@ def post_data_loop():
             time.sleep(1)
         print("待機終了")
 
-def test_sensors():
+def test():
     power.value(1)   # センサー電源をONにする
     while True:
         disp_sensor_value(read_sensors(), 100)
         time.sleep(1)
 
-while True:
-    post_data_loop()
-# test_sensors()
+def main():
+    while True:
+        post_data_loop()
+# main()
+test()

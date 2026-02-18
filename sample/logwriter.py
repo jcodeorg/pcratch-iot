@@ -1,4 +1,4 @@
-# logwriter
+# logwriter(旧バージョン)
 # センサーの値を読み取り、Googleスプレッドシートに書き込む
 
 import urequests
