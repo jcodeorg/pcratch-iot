@@ -1,5 +1,8 @@
-# logwriter
-# センサーの値を読み取り、Googleスプレッドシートに書き込む
+# Pcratch IoT 植物工場セットサンプル
+# A0: 水中ポンプ制御基板＋USBポンプ（5V）
+# A1: 土壌水分センサ（3.3V）Capacitive Soil Moisture Sensor v2.0
+# A2: LEDクリップライト ON/OFF(別電源)
+# I2C: OLED、温湿度センサ AHT20、照度センサ BH1750
 
 import urequests
 import json
@@ -12,7 +15,9 @@ from bh1750 import BH1750
 from ssd1306 import SSD1306_I2C
 from config import Config 
 
-# from bme280 import BME280
+# led & pump state
+led_on = False
+pump_on = False
 
 # config.txt の内容を読んで設定する
 cfg = Config.get_config()
@@ -52,18 +57,24 @@ modelist = ["LEDON", "LEDOFF", "PUMPON", "PUMPOFF"]
 
 # ==== PWM 出力関数 ====
 def apply_mode(mode_name):
+    global pump_on, led_on
+
     print(mode_name)
     if mode_name == "LEDON":
         led_pwm.duty_u16(int(65535 * 1))   # LED 点灯
+        led_on = True
 
     elif mode_name == "LEDOFF":
         led_pwm.duty_u16(0)       # LED 消灯
+        led_on = False
 
     elif mode_name == "PUMPON":
         pump_pwm.duty_u16(int(65535 * 1.0))  # ポンプ ON
+        pump_on = True
 
     elif mode_name == "PUMPOFF":
         pump_pwm.duty_u16(0)
+        pump_on = False
 
 # ==== ボタン割り込み ====
 def handle_button_event(pin, n):
@@ -111,12 +122,14 @@ def disp_sensor_value(data, count):
     if oled:
         # OLED 128 x 64
         t = 6
-        oled.fill_rect(0, 10, oled.width, oled.height - 10, 0)
+        # oled.fill_rect(0, 10, oled.width, oled.height - 10, 0)
+        oled.fill_rect(0, 0, oled.width, oled.height, 0)
+        oled.text( "Pump:" + ("ON " if pump_on else "OFF") + " LED:" + ("ON " if led_on else "OFF"), 0, t+0)
         oled.text( "Temp: {:.1f}C".format(data["temperature"]), 0, t+10)
         oled.text( "Humi: {:.1f}%".format(data["humidity"]), 0, t+20)
         oled.text( "Ligh: {:.1f}Lx".format(data["illuminance"]), 0, t+30)   # 照度センサーの値
         oled.text( "Soil: {:.1f}%".format(data["soil_moisture"]), 0, t+40)
-        oled.text(f"Cnt : {count}", 0, t+50)
+        # oled.text(f"Cnt : {count}", 0, t+50)
         oled.show()
 
 def send_log_to_gcf(data):
@@ -255,7 +268,7 @@ def post_data_loop():
     print2("ready")
     power.value(1)   # センサー電源をONにする
     blink_led()
-    time.sleep(1)
+    time.sleep(0.5)
     print("start1")
     sleep_time = SLEEPTIME # 秒
     disp_sensor_value(read_sensors(), 0)
