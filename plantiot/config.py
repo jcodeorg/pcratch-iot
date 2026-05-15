@@ -11,7 +11,8 @@ class Config:
             'MAIN_MODULE': 'main1.py',
             'GAS_URL': '',
             'DEVICEID': 'D0000',
-        }
+            'SEND_MIN': 60
+            }
         try:
             with open("wifi_config.txt", "r") as f:
                 for line in f:

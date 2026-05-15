@@ -14,6 +14,7 @@ from ahtx0 import AHT20
 from bh1750 import BH1750
 from ssd1306 import SSD1306_I2C
 from config import Config 
+import ntptime
 
 # led & pump state
 led_on = False
@@ -25,25 +26,21 @@ SSID = cfg['SSID']
 PASSWORD = cfg['PASSWORD']
 GAS_URL = cfg['GAS_URL']
 DEVICEID = cfg['DEVICEID']
+SEND_MIN = cfg['SEND_MIN']  # 分単位（60分ごとに送信）
+LED_ON="08:00"  # LED ON 時刻 (24時間表記 "HH:MM")
+LED_OFF="17:00" # LED OFF 時刻 (24時間表記 "HH:MM")
 
-SLEEPTIME = 20*60 # 秒
-WDT_TIMEOUT_MS = 3*60*1000      # 3分以内に feed() しないとリセット
-
-LEDPWM_PIN = 2           # LED 用 PWM ピン
-PUMPPWM_PIN = 0          # PUMP 用 PWM ピン
+LEDPWM_PIN = 2           # LEDライト用 PWM ピン
+PUMPPWM_PIN = 0          # 水中ポンプ用 PWM ピン
 
 LED_PIN = 15
-POWER_PIN = 19
 RIGHT_BUTTON_PIN = 17
-
-# WDT 初期化
-# wdt = WDT(timeout=WDT_TIMEOUT_MS)
 
 # Pin 初期化
 led = Pin(LED_PIN, Pin.OUT)      # ESP32内蔵LED
-power = Pin(POWER_PIN, Pin.OUT)    # センサー電源
 i2c = None
 oled = None
+adc_pin = None
 led_pwm = PWM(Pin(LEDPWM_PIN))     # LED 用 PWM ピン
 pump_pwm = PWM(Pin(PUMPPWM_PIN))    # PUMP 用 PWM ピン
 
@@ -61,7 +58,7 @@ def apply_mode(mode_name):
 
     print(mode_name)
     if mode_name == "LEDON":
-        led_pwm.duty_u16(int(65535 * 1))   # LED 点灯
+        led_pwm.duty_u16(65535)   # LED 点灯
         led_on = True
 
     elif mode_name == "LEDOFF":
@@ -69,7 +66,7 @@ def apply_mode(mode_name):
         led_on = False
 
     elif mode_name == "PUMPON":
-        pump_pwm.duty_u16(int(65535 * 1.0))  # ポンプ ON
+        pump_pwm.duty_u16(65535)  # ポンプ ON
         pump_on = True
 
     elif mode_name == "PUMPOFF":
@@ -96,6 +93,8 @@ def blink_led(times=5, sec=0.1):
         time.sleep(sec)
 
 def print2(text):
+    print(text)
+    """
     if oled:
         oled.fill_rect(0, 0, oled.width, 10, 0)
         oled.text(text, 0, 0)
@@ -103,21 +102,11 @@ def print2(text):
         print("p1:",text)
     else:
         print("p2:",text)
+    """
 
 
 # センサーの値をOLEDに表示
-'''
-    log_data = {
-        "timestamp": time.time(),
-        "device_id": "D3102",
-        "temperature": temperature,
-        "humidity": humidity,
-        "soil_moisture": soil_moisture,
-        "illuminance": illuminance,
-        "pressure": pressure
-    }
-'''
-def disp_sensor_value(data, count):
+def disp_sensor_value(data, timestr):
 
     if oled:
         # OLED 128 x 64
@@ -128,8 +117,8 @@ def disp_sensor_value(data, count):
         oled.text( "Temp: {:.1f}C".format(data["temperature"]), 0, t+10)
         oled.text( "Humi: {:.1f}%".format(data["humidity"]), 0, t+20)
         oled.text( "Ligh: {:.1f}Lx".format(data["illuminance"]), 0, t+30)   # 照度センサーの値
-        oled.text( "Soil: {:.1f}%".format(data["soil_moisture"]), 0, t+40)
-        # oled.text(f"Cnt : {count}", 0, t+50)
+        oled.text( "Soil: {}".format(data["soil_moisture"]), 0, t+40)
+        oled.text(f"{timestr}", 0, t+50)
         oled.show()
 
 def send_log_to_gcf(data):
@@ -146,32 +135,6 @@ def send_log_to_gcf(data):
         print(f"Error sending data to GAS: {e}")
         # response.close()
         return False
-
-# Wi-Fiに接続する
-def connect_wifi(retries=20):
-    wlan = network.WLAN(network.STA_IF)
-    for j in range(3):
-        wlan.active(True)
-        time.sleep(1)
-        try:
-            wlan.connect(SSID, PASSWORD)
-        except Exception as e:
-            print2(str(e))
-
-        time.sleep(1)
-        for i in range(retries):
-            # wdt.feed()
-            if wlan.isconnected():
-                print2(f"Connected in {i+1} seconds.")
-                return wlan
-            blink_led(2, 0.5)
-            print2(f"Try...{i+1}")
-            print(wlan.status())
-
-        print2("Wi-Fi failed")
-        wlan.active(False)
-        time.sleep(1)
-    return None
 
 # 水分率(%) = ((乾燥値 - ADC値) / (乾燥値 - 冠水値)) × 100
 def calculate_soil_moisture(adc_value, dry=3000, wet=1400):
@@ -191,7 +154,7 @@ def calculate_soil_moisture(adc_value, dry=3000, wet=1400):
 
 
 def read_sensors():
-    global i2c, oled
+    global i2c, oled, adc_pin
     # 初期化
     temperature = 0
     humidity = 0
@@ -199,14 +162,20 @@ def read_sensors():
     illuminance = 0
     pressure = 0  # BME280 を使う場合に備えて
 
-    # 土壌水分
-    try:
-        a1 = ADC(Pin(1, Pin.IN))
-        a1.atten(ADC.ATTN_11DB)
-        a1.width(ADC.WIDTH_12BIT)
-        soil_moisture = calculate_soil_moisture(a1.read())
-    except Exception as e:
-        print("Soil moisture sensor error:", e)
+    # 土壌水分（1回だけ初期化）
+    if not adc_pin:
+        try:
+            adc_pin = ADC(Pin(1, Pin.IN))
+            adc_pin.atten(ADC.ATTN_11DB)
+            adc_pin.width(ADC.WIDTH_12BIT)   # 0〜4095 の範囲
+        except Exception as e:
+            print("ADC initialization error:", e)
+    
+    if adc_pin:
+        try:
+            soil_moisture = adc_pin.read()
+        except Exception as e:
+            print("Soil moisture sensor error:", e)
 
     # I2C 初期化
     if not i2c:
@@ -263,65 +232,113 @@ def read_sensors():
     }
     return log_data
 
-# Sleepメイン処理
-def post_data_loop():
-    print2("ready")
-    power.value(1)   # センサー電源をONにする
-    blink_led()
-    time.sleep(0.5)
-    print("start1")
-    sleep_time = SLEEPTIME # 秒
-    disp_sensor_value(read_sensors(), 0)
-    log_data = read_sensors()
-    print(log_data)
-    print2("start2")
-
-    success = False
-    wlan = connect_wifi()
-    if wlan:
-        for i in range(10):
-            # 送信するデータ
-            print2(f"Post...{i + 1}")
-            log_data = read_sensors()
-            print(log_data)
-            
-            if send_log_to_gcf(log_data):
-                success = True
-                print2("Data sent!")
-                break
-            else:
-                print2("Failed!")
-            blink_led(2, 0.5)
-            blink_led(4, 0.25)
-
-    if not success:
-        print("リトライ失敗。次の試行まで待機します。")
-
-    if False:
-        # 成功しても失敗しても Deep sleep
-        print("Deep sleep開始")
-        power.value(0)   # センサー電源をOFF
-        led.value(1)   # LEDを消灯
-        # wdt.feed()  # WDTに餌を与える
-        machine.deepsleep(sleep_time*1000)
-        print("Deep sleepから復帰")
-    else:
-        print("次の書き込みまで待機...", sleep_time)
-        for i in range(sleep_time):
-        #    wdt.feed()  # WDTに餌を与える
-            print(i)
-            disp_sensor_value(read_sensors(), sleep_time - i)
-            time.sleep(1)
-        print("待機終了")
-
-def test():
-    power.value(1)   # センサー電源をONにする
-    while True:
-        disp_sensor_value(read_sensors(), 100)
+# Connect Wi-Fi
+def connect_wifi(retries=20):
+    wlan = network.WLAN(network.STA_IF)
+    for j in range(3):
+        wlan.active(True)
         time.sleep(1)
+        try:
+            wlan.connect(SSID, PASSWORD)
+        except Exception as e:
+            print2(str(e))
+
+        time.sleep(1)
+        for i in range(retries):
+            # wdt.feed()
+            if wlan.isconnected():
+                print2(f"Connected in {i+1} seconds.")
+                return wlan
+            blink_led(2, 0.5)
+            print2(f"Try...{i+1}")
+            print(wlan.status())
+
+        print2("Wi-Fi failed")
+        wlan.active(False)
+        time.sleep(1)
+    return None
+
+def set_time(retries=5):
+    for i in range(retries):
+        try:
+            ntptime.host = "ntp.nict.jp"
+            ntptime.settime()
+            print("時刻同期に成功しました")
+            return True
+        except Exception as e:
+            print(f"時刻同期に失敗しました ({i + 1}/{retries}): {e}")
+            time.sleep(1)
+    return False
+
+def format_local_time():
+    # ntptime.settime() の時刻(UTC)を JST(UTC+9) に補正
+    tm = time.localtime(time.time() + 9 * 3600)
+    return "{:02d}-{:02d} {:02d}:{:02d}:{:02d}".format(
+        tm[1], tm[2], tm[3], tm[4], tm[5]
+    )
+
+def parse_hhmm_to_min(hhmm):
+    hh, mm = hhmm.split(":")
+    hh = int(hh)
+    mm = int(mm)
+    if hh < 0 or hh > 23 or mm < 0 or mm > 59:
+        raise ValueError("time out of range")
+    return hh * 60 + mm
+
+def control_led_by_schedule(on_min, off_min):
+    # JST の現在時刻を分単位に変換
+    tm = time.localtime(time.time() + 9 * 3600)
+    now_min = tm[3] * 60 + tm[4]
+
+    # on <= off: 同日内, on > off: 日付またぎ
+    if on_min <= off_min:
+        should_on = on_min <= now_min < off_min
+    else:
+        should_on = (now_min >= on_min) or (now_min < off_min)
+
+    if should_on and not led_on:
+        apply_mode("LEDON")
+    elif (not should_on) and led_on:
+        apply_mode("LEDOFF")
 
 def main():
+    wlan = connect_wifi()
+    if wlan and set_time():
+        now_str = format_local_time()
+        print("現在時刻:", now_str)
+        print2(now_str)
+    else:
+        print("時刻同期できませんでした")
+
+    try:
+        led_on_min = parse_hhmm_to_min(LED_ON)
+        led_off_min = parse_hhmm_to_min(LED_OFF)
+    except Exception as e:
+        print("LED schedule format error:", e)
+        led_on_min = None
+        led_off_min = None
+
+    log_data = read_sensors()
+    if led_on_min is not None:
+        control_led_by_schedule(led_on_min, led_off_min)
+    disp_sensor_value(log_data, format_local_time())    # OLED に表示
+    send_log_to_gcf(log_data)   # GAS に送信
+
+    last_send_ms = time.ticks_ms()
+    send_interval_ms = SEND_MIN * 60 * 1000
     while True:
-        post_data_loop()
-# main()
-test()
+        if led_on_min is not None:
+            control_led_by_schedule(led_on_min, led_off_min)
+
+        log_data = read_sensors()
+        # print(log_data)
+        disp_sensor_value(log_data, format_local_time())    # OLED に表示
+
+        now_ms = time.ticks_ms()
+        if time.ticks_diff(now_ms, last_send_ms) >= send_interval_ms:
+            last_send_ms = now_ms
+            send_log_to_gcf(log_data)   # GAS に送信
+
+        time.sleep(1)
+
+main()
