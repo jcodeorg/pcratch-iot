@@ -26,9 +26,16 @@ SSID = cfg['SSID']
 PASSWORD = cfg['PASSWORD']
 GAS_URL = cfg['GAS_URL']
 DEVICEID = cfg['DEVICEID']
-SEND_MIN = cfg['SEND_MIN']  # 分単位（60分ごとに送信）
-LED_ON="08:00"  # LED ON 時刻 (24時間表記 "HH:MM")
-LED_OFF="17:00" # LED OFF 時刻 (24時間表記 "HH:MM")
+SEND_MIN = int(cfg.get('SEND_MIN', 60))  # 分単位（60分ごとに送信）
+LED_ON = cfg.get('LED_ON', "")   # LED ON 時刻 (24時間表記 "HH:MM")
+LED_OFF = cfg.get('LED_OFF', "") # LED OFF 時刻 (24時間表記 "HH:MM")
+
+print("SSID:", SSID)
+print("GAS_URL:", GAS_URL)
+print("DEVICEID:", DEVICEID)
+print("SEND_MIN:", SEND_MIN)
+print("LED_ON:", LED_ON)
+print("LED_OFF:", LED_OFF)
 
 LEDPWM_PIN = 2           # LEDライト用 PWM ピン
 PUMPPWM_PIN = 0          # 水中ポンプ用 PWM ピン
