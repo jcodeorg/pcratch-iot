@@ -16,6 +16,13 @@ from ssd1306 import SSD1306_I2C
 from config import Config 
 import ntptime
 
+
+def safe_int(value, default):
+    try:
+        return int(str(value).strip())
+    except Exception:
+        return default
+
 # led & pump state
 led_on = False
 pump_on = False
@@ -26,9 +33,11 @@ SSID = cfg['SSID']
 PASSWORD = cfg['PASSWORD']
 GAS_URL = cfg['GAS_URL']
 DEVICEID = cfg['DEVICEID']
-SEND_MIN = int(cfg.get('SEND_MIN', 60))  # 分単位（60分ごとに送信）
+SEND_MIN = safe_int(cfg.get('SEND_MIN', 60), 60)  # 分単位（60分ごとに送信）
 LED_ON = str(cfg.get('LED_ON', "") or "").strip()   # LED ON 時刻 (24時間表記 "HH:MM")
 LED_OFF = str(cfg.get('LED_OFF', "") or "").strip() # LED OFF 時刻 (24時間表記 "HH:MM")
+PUMP_ON = str(cfg.get('PUMP_ON', "") or "").strip()   # PUMP ON 時刻 (24時間表記 "HH:MM")
+PUMP_MS = max(0, safe_int(cfg.get('PUMP_MS', 3000), 3000))  # ミリ秒単位（ポンプ動作時間）
 
 print("SSID:", SSID)
 print("GAS_URL:", GAS_URL)
@@ -36,6 +45,8 @@ print("DEVICEID:", DEVICEID)
 print("SEND_MIN:", SEND_MIN)
 print("LED_ON:", LED_ON)
 print("LED_OFF:", LED_OFF)
+print("PUMP_ON:", PUMP_ON)
+print("PUMP_MS:", PUMP_MS)
 
 LEDPWM_PIN = 2           # LEDライト用 PWM ピン
 PUMPPWM_PIN = 0          # 水中ポンプ用 PWM ピン
@@ -308,6 +319,24 @@ def control_led_by_schedule(on_min, off_min):
     elif (not should_on) and led_on:
         apply_mode("LEDOFF")
 
+
+def control_pump_by_schedule(on_min, run_ms, last_run_day):
+    # JST の現在時刻を分単位に変換
+    tm = time.localtime(time.time() + 9 * 3600)
+    now_min = tm[3] * 60 + tm[4]
+    day_key = (tm[0], tm[1], tm[2])
+
+    # 同一日の同一時刻で多重実行しない
+    if now_min == on_min and last_run_day != day_key:
+        print("PUMP schedule start:", format_local_time(), "for", run_ms, "ms")
+        apply_mode("PUMPON")
+        time.sleep_ms(run_ms)
+        apply_mode("PUMPOFF")
+        print("PUMP schedule end:", format_local_time())
+        return day_key
+
+    return last_run_day
+
 def main():
     wlan = connect_wifi()
     if wlan and set_time():
@@ -330,17 +359,32 @@ def main():
             led_on_min = None
             led_off_min = None
 
+    if not PUMP_ON:
+        print("PUMP timer disabled: PUMP_ON is empty")
+        pump_on_min = None
+    else:
+        try:
+            pump_on_min = parse_hhmm_to_min(PUMP_ON)
+        except Exception as e:
+            print("PUMP schedule format error:", e)
+            pump_on_min = None
+
     log_data = read_sensors()
     if led_on_min is not None:
         control_led_by_schedule(led_on_min, led_off_min)
+    last_pump_run_day = None
+    if pump_on_min is not None:
+        last_pump_run_day = control_pump_by_schedule(pump_on_min, PUMP_MS, last_pump_run_day)
     disp_sensor_value(log_data, format_local_time())    # OLED に表示
     send_log_to_gcf(log_data)   # GAS に送信
 
     last_send_ms = time.ticks_ms()
-    send_interval_ms = SEND_MIN * 60 * 1000
+    send_interval_ms = int(SEND_MIN) * 60 * 1000
     while True:
         if led_on_min is not None:
             control_led_by_schedule(led_on_min, led_off_min)
+        if pump_on_min is not None:
+            last_pump_run_day = control_pump_by_schedule(pump_on_min, PUMP_MS, last_pump_run_day)
 
         log_data = read_sensors()
         # print(log_data)
