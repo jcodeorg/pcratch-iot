@@ -27,8 +27,8 @@ PASSWORD = cfg['PASSWORD']
 GAS_URL = cfg['GAS_URL']
 DEVICEID = cfg['DEVICEID']
 SEND_MIN = int(cfg.get('SEND_MIN', 60))  # 分単位（60分ごとに送信）
-LED_ON = cfg.get('LED_ON', "")   # LED ON 時刻 (24時間表記 "HH:MM")
-LED_OFF = cfg.get('LED_OFF', "") # LED OFF 時刻 (24時間表記 "HH:MM")
+LED_ON = str(cfg.get('LED_ON', "") or "").strip()   # LED ON 時刻 (24時間表記 "HH:MM")
+LED_OFF = str(cfg.get('LED_OFF', "") or "").strip() # LED OFF 時刻 (24時間表記 "HH:MM")
 
 print("SSID:", SSID)
 print("GAS_URL:", GAS_URL)
@@ -317,13 +317,18 @@ def main():
     else:
         print("時刻同期できませんでした")
 
-    try:
-        led_on_min = parse_hhmm_to_min(LED_ON)
-        led_off_min = parse_hhmm_to_min(LED_OFF)
-    except Exception as e:
-        print("LED schedule format error:", e)
+    if not LED_ON or not LED_OFF:
+        print("LED timer disabled: LED_ON or LED_OFF is empty")
         led_on_min = None
         led_off_min = None
+    else:
+        try:
+            led_on_min = parse_hhmm_to_min(LED_ON)
+            led_off_min = parse_hhmm_to_min(LED_OFF)
+        except Exception as e:
+            print("LED schedule format error:", e)
+            led_on_min = None
+            led_off_min = None
 
     log_data = read_sensors()
     if led_on_min is not None:
