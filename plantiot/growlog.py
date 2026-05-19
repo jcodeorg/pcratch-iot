@@ -45,6 +45,10 @@ class DeviceState:
         self.led_on = False
         self.pump_on = False
         self.mode = 0
+        # スケジュールポンプ用ステートマシン
+        self.pump_start_ms = None   # 稼働開始時刻 (ticks_ms)。None=停止中
+        self.pump_run_ms = 0        # 稼働時間 (ms)
+        self.pump_triggered_min = -1  # 直近トリガーした分 (再トリガー防止用)
 
     def set_led(self, on):
         self.led_on = on
@@ -84,7 +88,7 @@ class MenuState:
     MANUAL_MENUS = ["Pump ON/OFF", "LED ON/OFF"]
     TIMER_MENUS = ["LED Start", "LED Hours", "Pump Start", "Pump Run"]
     CONFIG_MENUS = ["Auto WiFi", "Save", "Test Time"]
-    PUMP_DURATIONS_SEC = [0, 3, 5, 10, 30, 60]   # 0=OFF, 単位: 秒
+    PUMP_DURATIONS_SEC = [0, 5, 15, 30, 60]   # 0=OFF, 単位: 秒
     LED_DURATIONS_H = [0, 4, 6, 8, 10, 12]  # 0=OFF, 単位: 時間
     LED_START_HOURS = [8, 9, 10, 11, 12]      # 点灯開始時刻の選択肢（時）
     PUMP_START_HOURS = [8, 9, 10, 11, 12]     # 稼働開始時刻の選択肢（時）
@@ -160,7 +164,7 @@ class MenuState:
         return self.PUMP_DURATIONS_SEC[self.pump_duration_idx]
 
     def next_pump_duration(self):
-        """ポンプ稼働時間を次の設定に切り替える（OFF→3s→5s→10s→30s→60s→OFF...）。"""
+        """ポンプ稼働時間を次の設定に切り替える（OFF→5s→15spu→30s→60s→OFF...）。"""
         self.pump_duration_idx = (self.pump_duration_idx + 1) % len(self.PUMP_DURATIONS_SEC)
 
     def get_led_duration_h(self):
@@ -869,22 +873,33 @@ def control_led_by_schedule(state, on_min, off_min):
         apply_mode(state, "LEDOFF")
 
 
-def control_pump_by_schedule(state, on_min, run_ms, last_run_day):
+def control_pump_by_schedule(state, on_min, run_ms):
+    # ── 稼働中チェック: 時間が来たら自動停止 ──────────────────────────
+    if state.pump_start_ms is not None:
+        elapsed = time.ticks_diff(time.ticks_ms(), state.pump_start_ms)
+        if elapsed >= state.pump_run_ms:
+            apply_mode(state, "PUMPOFF")
+            print("PUMP schedule end:", format_local_time())
+            state.pump_start_ms = None
+        return  # 停止判定の有無に関わらず、今回ループの起動チェックはスキップ
+
     now_min = now_jst_minute_of_day()
-    today = day_key_jst()
 
-    if now_min == on_min and last_run_day != today:
+    # ── 指定分を外れたらトリガーフラグをリセット（翌日・同日再テスト対応）──
+    if now_min != on_min:
+        state.pump_triggered_min = -1
+        return
+
+    # ── 指定分に到達: 稼働時間 > 0 かつ同分未トリガーなら起動 ────────────
+    if run_ms > 0 and state.pump_triggered_min != on_min:
         print("PUMP schedule start:", format_local_time(), "for", run_ms, "ms")
+        state.pump_triggered_min = on_min
+        state.pump_start_ms = time.ticks_ms()
+        state.pump_run_ms = run_ms
         apply_mode(state, "PUMPON")
-        time.sleep_ms(run_ms)
-        apply_mode(state, "PUMPOFF")
-        print("PUMP schedule end:", format_local_time())
-        return today
-
-    return last_run_day
 
 
-def apply_schedule_controls(state, menu, last_pump_run_day):
+def apply_schedule_controls(state, menu):
     """メニューのタイマー設定を考慮してスケジュール制御を実行。"""
     # LED タイマー: メニューで選択した開始時刻から指定時間数だけ自動点灯
     led_h = menu.get_led_duration_h()
@@ -893,21 +908,15 @@ def apply_schedule_controls(state, menu, last_pump_run_day):
         led_off_min = led_on_min + led_h * 60
         control_led_by_schedule(state, led_on_min, led_off_min)
 
-    # ポンプタイマー: 稼働時間 > 0 のとき、メニューで選択した時刻に自動稼働
+    # ポンプタイマー: 稼働中の停止チェックも含め常に呼び出す
     pump_sec = menu.get_pump_duration_sec()
-    if pump_sec > 0:
-        pump_on_min = menu.get_pump_start_min()
-        return control_pump_by_schedule(state, pump_on_min, pump_sec * 1000, last_pump_run_day)
-    return last_pump_run_day
+    pump_on_min = menu.get_pump_start_min()
+    control_pump_by_schedule(state, pump_on_min, pump_sec * 1000)
 
 
-def run_cycle(hw, state, menu, last_pump_run_day):
+def run_cycle(hw, state, menu):
     """1サイクル分の制御とセンサー読み取りを行う。"""
-    last_pump_run_day = apply_schedule_controls(
-        state,
-        menu,
-        last_pump_run_day,
-    )
+    apply_schedule_controls(state, menu)
     log_data = read_sensors(hw)
 
     # 表示: レベル0=メインメニュー表示、レベル1=サブメニュー表示、レベル2=センサー表示
@@ -917,7 +926,7 @@ def run_cycle(hw, state, menu, last_pump_run_day):
     else:
         disp_menu(hw, menu)
 
-    return log_data, last_pump_run_day
+    return log_data
 
 
 def main():
@@ -936,7 +945,6 @@ def main():
         print("Auto WiFi connecting (async)...")
         start_wifi_connect()
 
-    last_pump_run_day = None
     last_send_ms = time.ticks_ms()
 
     while True:
@@ -950,12 +958,7 @@ def main():
             pending_execute = False
             execute_menu_action()
 
-        log_data, last_pump_run_day = run_cycle(
-            hw,
-            state,
-            menu,
-            last_pump_run_day,
-        )
+        log_data = run_cycle(hw, state, menu)
 
         # Wi-Fi に接続中かつ自動送信間隔が設定されているときだけログを送信する
         # 学習メモ: 間隔 0 は「無効」を意味します。
