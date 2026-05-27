@@ -831,7 +831,7 @@ def set_test_time_jst(h=8, m=59):
     utc_h = utc_total_min // 60
     utc_m = utc_total_min % 60
     # 固定日付（テスト用）: 2025-01-01（水曜日 = weekday 2）UTC
-    RTC().datetime((2025, 1, 1, 2, utc_h, utc_m, 0, 0))
+    RTC().datetime((2025, 1, 1, 2, utc_h, utc_m, 50, 0))
     print("Test time set:", format_local_time())
 
 
